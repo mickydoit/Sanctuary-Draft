@@ -15,7 +15,7 @@
 //  not shared with anyone else until Supabase is filled in).
 //
 window.LBH_CONFIG = {
-  SUPABASE_URL: 'https://ahecfusgkzzjpbxgvjmh.supabase.co',
-  SUPABASE_ANON_KEY: 'sb_publishable_8g5OMOHCxhWTTAzvP4On4A_TC-sh19O',
+  SUPABASE_URL: 'https://wigvjrrcmkfkqhdendwq.supabase.co',
+  SUPABASE_ANON_KEY: 'sb_publishable_gOQCflzbIykzpL1b0YnCUA_IT0aU_ZC',
   ADMIN_PASSWORD: 'lbh2026',
 };
