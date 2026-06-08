@@ -1,0 +1,44 @@
+name: Sync World Cup scores
+
+# Polls football-data.org and writes results into Supabase. GitHub Pages is
+# static and can't poll on its own, so this scheduled job is the "server" that
+# keeps the ladder live. Set two repository secrets first (Settings → Secrets and
+# variables → Actions): FOOTBALL_DATA_TOKEN (free from football-data.org) and
+# DATABASE_URL (your Supabase session-pooler connection string).
+on:
+  schedule:
+    - cron: '*/5 * * * *' # every 5 min — GitHub's minimum cron granularity
+  workflow_dispatch: {} # adds a manual "Run workflow" button for testing
+
+# Serialise runs so a back-to-back run waits for the previous one rather than
+# overlapping or being cancelled — this is what gives continuous coverage.
+concurrency:
+  group: sync-scores
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+
+      # GitHub cron fires at most every 5 min, so each run polls every ~60s for
+      # ~5 min. Consecutive scheduled runs (serialised by the concurrency group)
+      # then give near-continuous, 1-minute-resolution updates — a finished
+      # result reaches Supabase within ~1 min of the provider marking it final,
+      # and the site's pages already refresh every minute. A single failed
+      # attempt (transient API error) is logged and the loop keeps going.
+      - name: Poll scores every ~60s
+        env:
+          SCORE_PROVIDER: football-data
+          FOOTBALL_DATA_TOKEN: ${{ secrets.FOOTBALL_DATA_TOKEN }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          for i in 1 2 3 4 5; do
+            node scripts/sync-scores.mjs || echo "::warning::sync attempt $i failed, continuing"
+            if [ "$i" -lt 5 ]; then sleep 55; fi
+          done

@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0c4a29" />
+  <title><%= title %> · LBH Club</title>
+  <link rel="icon" type="image/svg+xml" href="/img/favicon.svg" />
+  <link rel="stylesheet" href="/css/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/">
+      <img class="brand-logo" src="/img/logo.svg" alt="" width="38" height="45" />
+      <span class="brand-text">
+        <span class="brand-main">LBH Club</span>
+        <span class="brand-sub">World Cup Draft</span>
+      </span>
+    </a>
+    <nav>
+      <a href="/" class="<%= active === 'ladder' ? 'active' : '' %>">Ladder</a>
+      <a href="/fixtures" class="<%= active === 'fixtures' ? 'active' : '' %>">Fixtures</a>
+      <a href="/bracket" class="<%= active === 'bracket' ? 'active' : '' %>">Bracket</a>
+      <a href="/draft" class="<%= active === 'draft' ? 'active' : '' %>">Draft</a>
+      <% if (isAdmin) { %>
+        <a href="/admin" class="<%= active === 'admin' ? 'active' : '' %>">Admin</a>
+        <form method="post" action="/logout" class="inline"><button class="link">Logout</button></form>
+      <% } else { %>
+        <a href="/login">Admin</a>
+      <% } %>
+    </nav>
+  </header>
+  <main class="container">

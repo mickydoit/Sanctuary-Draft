@@ -1,0 +1,75 @@
+<%- include('partials/head') %>
+<h1>Admin</h1>
+
+<% if (notice) { %><div class="banner ok"><%= notice %></div><% } %>
+<% if (problem) { %><div class="banner err"><%= problem %></div><% } %>
+
+<section class="card">
+  <% const envVar = providerName === 'football-data' ? 'FOOTBALL_DATA_TOKEN' : 'SPORTMONKS_TOKEN'; %>
+  <h2>Live scores <span class="provider-tag"><%= providerName %></span></h2>
+  <% if (tokenSet) { %>
+    <p class="hint">API token detected — scores auto-sync on a timer. You can also trigger a sync now.</p>
+  <% } else { %>
+    <p class="hint">No API token set. Add <code><%= envVar %></code> to your environment to enable automatic scores. Manual entry below always works as a fallback.</p>
+  <% } %>
+  <div class="btnrow">
+    <form method="post" action="/admin/sync"><button <%= tokenSet ? '' : 'disabled' %>>Sync scores now</button></form>
+    <form method="post" action="/admin/import" onsubmit="return confirm('Import official teams + fixtures from the API? This replaces the current teams/fixtures and clears any draft, so do it BEFORE drafting.')">
+      <button class="danger" <%= tokenSet ? '' : 'disabled' %>>Import 2026 data</button>
+    </form>
+  </div>
+</section>
+
+<section class="card">
+  <h2>Players</h2>
+  <form method="post" action="/admin/players" class="form grid-players">
+    <% players.forEach((p) => { %>
+      <label>Slot <%= p.draft_slot || '–' %>
+        <input name="player_<%= p.id %>" value="<%= p.name %>" />
+      </label>
+    <% }) %>
+    <button type="submit">Save names</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>Settings</h2>
+  <form method="post" action="/admin/settings" class="form">
+    <label class="checkbox">
+      <input type="checkbox" name="scoreThirdPlace" <%= settings.score_third_place ? 'checked' : '' %> />
+      Score the third-place playoff (1 point)
+    </label>
+    <button type="submit">Save settings</button>
+  </form>
+  <hr />
+  <form method="post" action="/admin/reseed" onsubmit="return confirm('Reseed wipes teams, fixtures, players AND the draft. Continue?')">
+    <button class="danger">Reseed test data</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>Enter scores</h2>
+  <p class="hint">For knockout matches, also pick the team that advances (this is who gets the points, including penalty wins).</p>
+  <% groups.forEach((g) => { %>
+    <h3><%= g.title %></h3>
+    <% g.fixtures.forEach((f) => { %>
+      <form method="post" action="/admin/score" id="fx-<%= f.id %>" class="score-row">
+        <input type="hidden" name="fixtureId" value="<%= f.id %>" />
+        <span class="t home"><%= f.home_name %></span>
+        <input class="sc" type="number" min="0" name="homeScore" value="<%= f.home_score ?? '' %>" />
+        <input class="sc" type="number" min="0" name="awayScore" value="<%= f.away_score ?? '' %>" />
+        <span class="t away"><%= f.away_name %></span>
+        <% if (f.stage !== 'group') { %>
+          <select name="winnerTeamId">
+            <option value="">advances…</option>
+            <option value="<%= f.home_team_id %>" <%= f.winner_team_id === f.home_team_id ? 'selected' : '' %>><%= f.home_name %></option>
+            <option value="<%= f.away_team_id %>" <%= f.winner_team_id === f.away_team_id ? 'selected' : '' %>><%= f.away_name %></option>
+          </select>
+        <% } %>
+        <button type="submit"><%= f.status === 'finished' ? 'Update' : 'Save' %></button>
+      </form>
+    <% }) %>
+  <% }) %>
+</section>
+
+<%- include('partials/foot') %>

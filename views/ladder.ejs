@@ -1,0 +1,19 @@
+<%- include('partials/head') %>
+<h1>Ladder</h1>
+<table class="ladder">
+  <thead>
+    <tr><th>#</th><th>Player</th><th>Teams</th><th>Points</th></tr>
+  </thead>
+  <tbody>
+    <% ladder.forEach((p, i) => { %>
+      <tr class="<%= i === 0 ? 'leader' : '' %>">
+        <td class="rank"><%= i + 1 %></td>
+        <td><%= p.name %></td>
+        <td><%= p.teamCount %></td>
+        <td class="pts"><%= p.points %></td>
+      </tr>
+    <% }) %>
+  </tbody>
+</table>
+<p class="hint">Points update as results are entered. Group win = 1, draw = 0.5. Knockouts: R32 = 1, R16 = 2, QF = 3, SF = 4, Final = 5.</p>
+<%- include('partials/foot') %>

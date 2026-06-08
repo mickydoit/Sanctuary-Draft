@@ -1,0 +1,46 @@
+<%- include('partials/head') %>
+<h1>Knockout Bracket</h1>
+<% if (!hasAny) { %>
+  <p class="hint">The knockout bracket fills in after the group stage (or once official data is imported). The structure is shown below.</p>
+<% } else { %>
+  <p class="hint">Advancing team highlighted. The name underneath each nation is the mate who owns it. Points: R32 = 1, R16 = 2, QF = 3, SF = 4, Final = 5.</p>
+<% } %>
+
+<%
+  function side(name, owner, score, isWinner, finished, tbd) {
+%>
+  <div class="ko-side <%= isWinner ? 'win' : '' %> <%= tbd ? 'tbd' : '' %>">
+    <span class="ko-team"><%= tbd ? 'TBD' : (name || 'TBD') %></span>
+    <span class="ko-owner"><%= owner || '' %></span>
+    <span class="ko-score"><%= finished && score != null ? score : '' %></span>
+  </div>
+<% } %>
+
+<div class="bracket">
+  <% rounds.forEach((rd) => { %>
+    <div class="round">
+      <h3 class="round-label"><%= rd.label %> <span class="round-pts"><%= rd.pts %> pt<%= rd.pts > 1 ? 's' : '' %></span></h3>
+      <div class="round-matches">
+        <% rd.matches.forEach((m) => { %>
+          <div class="ko-match <%= m.status === 'finished' ? 'played' : '' %> <%= m.tbd ? 'is-tbd' : '' %>">
+            <% if (!m.tbd && m.time_label) { %><div class="ko-when"><%= m.date_label %> · <%= m.time_label %></div><% } %>
+            <%- side(m.home_name, m.home_owner, m.home_score, m.home_is_winner, m.status === 'finished', m.tbd) %>
+            <%- side(m.away_name, m.away_owner, m.away_score, m.away_is_winner, m.status === 'finished', m.tbd) %>
+          </div>
+        <% }) %>
+      </div>
+    </div>
+  <% }) %>
+</div>
+
+<% if (thirdPlace) { %>
+  <div class="third-place">
+    <h3 class="round-label">Third-place playoff <span class="round-pts">1 pt</span></h3>
+    <div class="ko-match <%= thirdPlace.status === 'finished' ? 'played' : '' %>">
+      <% if (thirdPlace.time_label) { %><div class="ko-when"><%= thirdPlace.date_label %> · <%= thirdPlace.time_label %></div><% } %>
+      <%- side(thirdPlace.home_name, thirdPlace.home_owner, thirdPlace.home_score, thirdPlace.home_is_winner, thirdPlace.status === 'finished', false) %>
+      <%- side(thirdPlace.away_name, thirdPlace.away_owner, thirdPlace.away_score, thirdPlace.away_is_winner, thirdPlace.status === 'finished', false) %>
+    </div>
+  </div>
+<% } %>
+<%- include('partials/foot') %>

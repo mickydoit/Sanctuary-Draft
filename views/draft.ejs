@@ -1,0 +1,93 @@
+<%- include('partials/head') %>
+
+<div class="draft-head">
+  <h1>Draft Room</h1>
+  <% if (isAdmin && settings.draft_status !== 'not_started') { %>
+    <form method="post" action="/draft/reset" onsubmit="return confirm('Reset the entire draft? All picks will be cleared and the order re-rolled.')">
+      <button class="danger">Reset draft</button>
+    </form>
+  <% } %>
+</div>
+
+<% if (settings.draft_status === 'not_started') { %>
+
+  <div class="card">
+    <p>The draft hasn't started yet. The pick order will be <strong>randomised</strong>, then run as a snake
+      (1-2-3-4-5, then 5-4-3-2-1, and so on) for <strong><%= teamsPerPlayer %> rounds</strong> — that's
+      <%= teamsPerPlayer %> teams each, with 3 nations left undrafted.</p>
+    <ul class="players-list">
+      <% players.forEach((p) => { %><li><%= p.name %></li><% }) %>
+    </ul>
+    <% if (isAdmin) { %>
+      <form method="post" action="/draft/start" onsubmit="return confirm('Start the draft and lock in a random order?')">
+        <button class="primary">🎲 Start draft (randomise order)</button>
+      </form>
+    <% } else { %>
+      <p class="hint">An admin needs to log in and start the draft.</p>
+    <% } %>
+  </div>
+
+<% } else { %>
+
+  <div class="progress">
+    <div class="bar"><span style="width: <%= totalPicks ? (picksMade / totalPicks * 100) : 0 %>%"></span></div>
+    <span class="progress-label"><%= picksMade %> / <%= totalPicks %> picks</span>
+  </div>
+
+  <% if (settings.draft_status === 'in_progress' && current) { %>
+    <div class="onclock card">
+      <div class="onclock-main">
+        <span class="label">On the clock</span>
+        <span class="who"><%= current.playerName %></span>
+        <span class="meta">Pick #<%= current.pickNumber %> · Round <%= current.round %></span>
+      </div>
+      <% if (upcoming.length) { %>
+        <div class="upnext">Next: <%= upcoming.map((u) => u.playerName).join(' → ') %></div>
+      <% } %>
+    </div>
+  <% } else if (settings.draft_status === 'complete') { %>
+    <div class="card done">✅ Draft complete — teams are locked in.</div>
+  <% } %>
+
+  <div class="draft-grid">
+    <section class="rosters">
+      <h2>Rosters</h2>
+      <% players.forEach((p) => { %>
+        <div class="roster <%= current && current.playerId === p.id ? 'active' : '' %>">
+          <h3><span class="slot"><%= p.draft_slot %></span> <%= p.name %>
+            <span class="count"><%= p.roster.length %>/<%= teamsPerPlayer %></span></h3>
+          <ul>
+            <% p.roster.forEach((pick) => { %>
+              <li><span class="rank">#<%= pick.team_ranking %></span> <%= pick.team_name %></li>
+            <% }) %>
+            <% if (!p.roster.length) { %><li class="empty">—</li><% } %>
+          </ul>
+        </div>
+      <% }) %>
+    </section>
+
+    <% if (settings.draft_status === 'in_progress' && isAdmin && current) { %>
+      <section class="pickpane">
+        <h2>Pick for <span class="hl"><%= current.playerName %></span></h2>
+        <p class="hint">Best available first — by FIFA ranking</p>
+        <div class="team-buttons">
+          <% available.forEach((t) => { %>
+            <form method="post" action="/draft/pick">
+              <input type="hidden" name="teamId" value="<%= t.id %>" />
+              <button class="teambtn">
+                <span class="rank">#<%= t.ranking %></span>
+                <span class="tname"><%= t.name %></span>
+                <span class="grp"><%= t.grp %></span>
+              </button>
+            </form>
+          <% }) %>
+        </div>
+      </section>
+    <% } else if (settings.draft_status === 'in_progress' && !isAdmin) { %>
+      <section class="pickpane"><p class="hint">Log in as admin to make picks.</p></section>
+    <% } %>
+  </div>
+
+<% } %>
+
+<%- include('partials/foot') %>

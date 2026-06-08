@@ -1,0 +1,18 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "static",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["--yes", "http-server", ".", "-p", "5175", "-c-1", "--silent"],
+      "port": 5175
+    },
+    {
+      "name": "lbh-draft",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["start"],
+      "port": 3000,
+      "autoPort": true
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "name": "lbh-club-world-cup-draft",
+  "version": "1.0.0",
+  "description": "LBH Club — 5-player fantasy draft for the 2026 FIFA World Cup",
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "db:setup": "node src/db/setup.js",
+    "db:seed": "node src/db/seed.js",
+    "db:reset": "node src/db/reset.js",
+    "sync": "node scripts/sync-scores.mjs",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "^0.2.17",
+    "dotenv": "^16.4.5",
+    "ejs": "^3.1.10",
+    "express": "^4.19.2",
+    "express-session": "^1.18.0",
+    "node-cron": "^3.0.3",
+    "pg": "^8.12.0"
+  }
+}

@@ -1,0 +1,11 @@
+<%- include('partials/head') %>
+<h1>Admin login</h1>
+<% if (error) { %><p class="error"><%= error %></p><% } %>
+<form method="post" action="/login" class="card form narrow">
+  <input type="hidden" name="next" value="<%= next %>" />
+  <label>Password
+    <input type="password" name="password" autofocus autocomplete="current-password" />
+  </label>
+  <button type="submit" class="primary">Log in</button>
+</form>
+<%- include('partials/foot') %>
