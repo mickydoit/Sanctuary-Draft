@@ -23,6 +23,8 @@ let loginError = null;
 let refreshTimer = null;
 let lastPaintedRoute = null;
 let lastRenderedBody = null;
+let lastRenderedRoute = null;
+let prevRoute = null;
 
 const NAV = [
   { route: '/', label: 'Ladder', key: 'ladder' },
@@ -113,6 +115,8 @@ function paint(route, body) {
 
 async function render(opts = {}) {
   const route = currentRoute();
+  if (lastRenderedRoute !== route) prevRoute = lastRenderedRoute;
+  lastRenderedRoute = route;
   if (!root.querySelector('.topbar')) paint(route, `<p class="hint">Loading…</p>`);
 
   if (route === '/login') {
@@ -140,7 +144,8 @@ async function render(opts = {}) {
     body = renderPlayerView(getPlayerView(data, playerId));
   } else if (route.startsWith('/draft/team/')) {
     const teamId = Number(route.split('/')[3]);
-    body = renderTeamView(getTeamView(data, teamId));
+    const fromPlayer = prevRoute && prevRoute.startsWith('/draft/player/') ? prevRoute : null;
+    body = renderTeamView(getTeamView(data, teamId), fromPlayer);
   } else {
     switch (route) {
       case '/fixtures':
