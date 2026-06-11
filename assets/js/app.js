@@ -104,6 +104,7 @@ function paint(route, body) {
     root.innerHTML = headerHtml(route) + `<main class="container" id="app">${body}</main>`;
     lastPaintedRoute = route;
     lastRenderedBody = body;
+    window.scrollTo(0, 0);
   }
   // Restore open state on auto-refresh (skip on first load — let the smart default apply)
   if (hadAccordions && openGroups.size > 0) {
@@ -188,7 +189,7 @@ async function render(opts = {}) {
   setAutoRefresh(route);
   // On navigation (not the silent auto-refresh), jump to where the tournament
   // is up to so you don't have to scroll past weeks of finished games.
-  if (opts.scrollToCurrent && (route === '/fixtures' || route === '/bracket')) {
+  if (opts.scrollToCurrent && route === '/bracket') {
     scrollToCurrentMatch(route);
   }
 }
@@ -266,7 +267,14 @@ root.addEventListener('submit', (e) => {
     const home = fd.get('homeScore') === '' ? null : Number(fd.get('homeScore'));
     const away = fd.get('awayScore') === '' ? null : Number(fd.get('awayScore'));
     const w = fd.get('winnerTeamId');
-    run(async () => { await store.setScore(id, home, away, w ? Number(w) : null); flash = { notice: 'Score saved.' }; });
+    const homeTeamId = Number(fd.get('homeTeamId'));
+    const awayTeamId = Number(fd.get('awayTeamId'));
+    let winnerId = w ? Number(w) : null;
+    if (!winnerId && home != null && away != null) {
+      if (home > away) winnerId = homeTeamId;
+      else if (away > home) winnerId = awayTeamId;
+    }
+    run(async () => { await store.setScore(id, home, away, winnerId); flash = { notice: 'Score saved.' }; });
   } else if (action === 'players') {
     const map = {};
     for (const [k, v] of fd.entries()) if (k.startsWith('player_')) map[k.slice(7)] = v;
@@ -312,6 +320,9 @@ root.addEventListener('click', (e) => {
   } else if (action === 'del-fixture') {
     if (!window.confirm('Delete this knockout match?')) return;
     run(() => store.deleteFixture(Number(el.dataset.id)));
+  } else if (action === 'scroll-to') {
+    const target = document.getElementById(el.dataset.target);
+    if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 });
 

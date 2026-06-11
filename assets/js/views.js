@@ -35,7 +35,7 @@ export function renderFixtures(groups) {
   if (!groups.length) return `<h1>Fixtures</h1><p class="hint">No fixtures yet.</p>`;
 
   const card = (f) => {
-    const scored = f.status === 'finished';
+    const scored = f.status === 'finished' && f.home_score != null && f.away_score != null;
     const sep = scored ? `${f.home_score}&ndash;${f.away_score}` : 'v';
     return `
     <div id="fx-${f.id}" class="fixture-card ${scored ? 'played' : ''}">
@@ -56,25 +56,24 @@ export function renderFixtures(groups) {
     </div>`;
   };
 
-  // Determine which group should be open by default:
-  // The last group that has started (kickoff passed) but isn't fully played yet.
-  // If no such group exists, open the first upcoming group.
+  const upcoming = groups.filter(g => !g.allPlayed);
+  const results  = groups.filter(g => g.allPlayed);
+
+  // Which upcoming group to open: the last one that has started or has any played
   const now = Date.now();
   let activeTitle = null;
-  for (const g of groups) {
-    const hasStarted = g.date_ts != null && g.date_ts <= now + 2 * 3600 * 1000; // 2hr lead-in
+  for (const g of upcoming) {
+    const hasStarted = g.date_ts != null && g.date_ts <= now + 2 * 3600 * 1000;
     const hasAnyPlayed = g.fixtures.some(f => f.status === 'finished');
-    if ((hasStarted || hasAnyPlayed) && !g.allPlayed) activeTitle = g.title;
+    if (hasStarted || hasAnyPlayed) activeTitle = g.title;
   }
   if (!activeTitle) {
-    const next = groups.find(g => !g.allPlayed && g.date_ts != null && g.date_ts > now);
+    const next = upcoming.find(g => g.date_ts != null && g.date_ts > now);
     if (next) activeTitle = next.title;
+    else if (upcoming.length > 0) activeTitle = upcoming[0].title;
   }
 
-  return `
-  <h1>Fixtures</h1>
-  <p class="hint">Times shown in AEST. Owner names appear once the draft is complete.</p>
-  ${groups.map((g) => {
+  const renderGroup = (g, forceOpen) => {
     const played = g.fixtures.filter(f => f.status === 'finished').length;
     const total = g.fixtures.length;
     const badge = g.allPlayed
@@ -82,7 +81,7 @@ export function renderFixtures(groups) {
       : played > 0
         ? `<span class="fxday-badge">${played}/${total} played</span>`
         : `<span class="fxday-badge">${total} match${total !== 1 ? 'es' : ''}</span>`;
-    const isOpen = g.title === activeTitle;
+    const isOpen = forceOpen !== undefined ? forceOpen : g.title === activeTitle;
     return `
     <details class="fxday" data-group="${esc(g.title)}"${isOpen ? ' open' : ''}>
       <summary class="fxday-header">
@@ -91,7 +90,23 @@ export function renderFixtures(groups) {
       </summary>
       <div class="fxday-body">${g.fixtures.map(card).join('')}</div>
     </details>`;
-  }).join('')}
+  };
+
+  const resultsBtn = results.length ? `
+    <button class="fx-jump-btn" data-action="scroll-to" data-target="fx-results">Past Results ↓</button>` : '';
+
+  const resultsSection = results.length ? `
+    <div class="fx-results" id="fx-results">
+      <p class="section-label">Results</p>
+      ${[...results].reverse().map(g => renderGroup(g, false)).join('')}
+    </div>` : '';
+
+  return `
+  <h1>Fixtures</h1>
+  <p class="hint">Times shown in AEST. Owner names appear once the draft is complete.</p>
+  ${resultsBtn}
+  ${upcoming.map(g => renderGroup(g)).join('')}
+  ${resultsSection}
   <div class="view-btn-wrap"><a class="view-btn" href="#/">View Ladder</a></div>`;
 }
 
@@ -308,12 +323,13 @@ function fxPill(f) {
   const sn = (n) => n ? (n.length > 5 ? n.slice(0, 4) + '..' : n) : '—';
   const when = [f.short_date_label, f.time_label].filter(Boolean).join(' ');
   const owners = (f.home_owner || f.away_owner) ? `${sn(f.home_owner)} v ${sn(f.away_owner)}` : '';
+  const played = f.status === 'finished' && f.home_score != null && f.away_score != null;
   return `
-  <li class="fixture ${f.status === 'finished' ? 'played' : ''}">
+  <li class="fixture ${played ? 'played' : ''}">
     <span class="fx-when">${esc(when || 'TBC')}</span>
     <div class="fx-teams">
       <span class="fx-home">${esc(f.home_name || 'TBD')}</span>
-      <span class="fx-sep">${f.status === 'finished' ? `${f.home_score}&ndash;${f.away_score}` : 'v'}</span>
+      <span class="fx-sep">${played ? `${f.home_score}&ndash;${f.away_score}` : 'v'}</span>
       <span class="fx-away">${esc(f.away_name || 'TBD')}</span>
     </div>
     <span class="fx-owners">${esc(owners)}</span>
@@ -393,6 +409,8 @@ export function renderAdmin({ groups, players, teams, settings, mode, notice, pr
     ${g.fixtures.map((f) => `
       <form data-action="score" id="fx-${f.id}" class="score-row">
         <input type="hidden" name="fixtureId" value="${f.id}" />
+        <input type="hidden" name="homeTeamId" value="${f.home_team_id}" />
+        <input type="hidden" name="awayTeamId" value="${f.away_team_id}" />
         <span class="t home">${esc(f.home_name || 'TBD')}</span>
         <input class="sc" type="number" min="0" name="homeScore" value="${f.home_score ?? ''}" />
         <input class="sc" type="number" min="0" name="awayScore" value="${f.away_score ?? ''}" />
