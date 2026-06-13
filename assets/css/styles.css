@@ -136,7 +136,7 @@ a:hover { text-decoration: underline; }
   align-items: center; justify-content: center;
 }
 #splash.splash-out { opacity: 0; pointer-events: none; transition: opacity .5s ease; }
-.splash-logo-wrap { display: flex; align-items: center; transform: translateY(-4vh); }
+.splash-logo-wrap { display: flex; align-items: center; justify-content: center; transform: translateY(-4vh); }
 .splash-logo-img {
   height: 120px; width: auto;
 }
