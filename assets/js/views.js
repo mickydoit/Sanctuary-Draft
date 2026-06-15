@@ -24,7 +24,7 @@ export function renderLadder(ladder) {
         <span class="ladder-avatar">${initials(p.name)}</span>
         <span class="ladder-name">${esc(p.name)}</span>
         <span class="ladder-teams">${p.teamCount}</span>
-        <span class="ladder-pts">${fmt(p.points)}${p.bonusPoints > 0 ? `<span class="ladder-bonus"> +${fmt(p.bonusPoints)}</span>` : ''}</span>
+        <span class="ladder-pts">${fmt(p.points)}</span>
       </a>`).join('')}
   </div>
   <p class="hint" style="margin-top:1rem">"Teams left" counts only your drafted nations still in the tournament. Points: group win = 1, draw = 0.5. Knockouts: R32 = 1, R16 = 2, QF = 3, SF = 4, Final = 5. Bonus pts (+0.25 each) for leading golden boot, assists, cards, clean sheets &amp; group tops — see <a href="#/stats">Stats</a>.</p>
