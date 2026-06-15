@@ -169,7 +169,7 @@ export function getBracket(data) {
   return { rounds, thirdPlace: (byStage.third || [])[0] || null, hasAny: ko.length > 0 };
 }
 
-export function getLadder(data) {
+export function getLadder(data, bonusByPlayer = []) {
   const ownership = ownershipMap(data.picks);
   const finished = data.fixtures
     .filter((f) => f.status === 'finished')
@@ -184,8 +184,14 @@ export function getLadder(data) {
     if (alive(pick.team_id)) teamCounts[pick.player_id] = (teamCounts[pick.player_id] || 0) + 1;
   }
 
+  const bonusMap = Object.fromEntries(bonusByPlayer.map(({ name, pts }) => [name, pts]));
+
   return [...data.players]
-    .map((p) => ({ ...p, points: totals[p.id] ?? 0, teamCount: teamCounts[p.id] ?? 0 }))
+    .map((p) => {
+      const base = totals[p.id] ?? 0;
+      const bonus = bonusMap[p.name] ?? 0;
+      return { ...p, points: base + bonus, basePoints: base, bonusPoints: bonus, teamCount: teamCounts[p.id] ?? 0 };
+    })
     .sort((a, b) => b.points - a.points || a.name.localeCompare(b.name));
 }
 

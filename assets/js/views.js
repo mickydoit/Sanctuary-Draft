@@ -7,6 +7,7 @@ const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&':
 // ---------------------------------------------------------------- Ladder
 export function renderLadder(ladder) {
   const initials = (name) => name ? name.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase() : '?';
+  const fmt = (n) => Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/\.?0+$/, '');
   return `
   <h1>Ladder</h1>
   <div class="ladder-header">
@@ -23,10 +24,10 @@ export function renderLadder(ladder) {
         <span class="ladder-avatar">${initials(p.name)}</span>
         <span class="ladder-name">${esc(p.name)}</span>
         <span class="ladder-teams">${p.teamCount}</span>
-        <span class="ladder-pts">${p.points}</span>
+        <span class="ladder-pts">${fmt(p.points)}${p.bonusPoints > 0 ? `<span class="ladder-bonus"> +${fmt(p.bonusPoints)}</span>` : ''}</span>
       </a>`).join('')}
   </div>
-  <p class="hint" style="margin-top:1rem">"Teams left" counts only your drafted nations still in the tournament. Points: group win = 1, draw = 0.5. Knockouts: R32 = 1, R16 = 2, QF = 3, SF = 4, Final = 5. Own both teams in a match? Any decisive result scores the full win, a draw scores 0.5.</p>
+  <p class="hint" style="margin-top:1rem">"Teams left" counts only your drafted nations still in the tournament. Points: group win = 1, draw = 0.5. Knockouts: R32 = 1, R16 = 2, QF = 3, SF = 4, Final = 5. Bonus pts (+0.25 each) for leading golden boot, assists, cards, clean sheets &amp; group tops — see <a href="#/stats">Stats</a>.</p>
   <div class="view-btn-wrap"><a class="view-btn" href="#/fixtures">View Fixtures</a></div>`;
 }
 
