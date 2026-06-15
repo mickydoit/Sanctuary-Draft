@@ -509,11 +509,13 @@ export function renderStats(s) {
 
   // ── Bonus pills ──
   const pillsHtml = bonusByPlayer.length
-    ? bonusByPlayer.map((p, i) => `
-      <div class="stat-pill ${i === 0 ? 'leader' : 'other'}">
+    ? bonusByPlayer.map((p, i) => {
+        const cls = p.pts === 0 ? 'zero' : i === 0 ? 'leader' : 'other';
+        return `<div class="stat-pill ${cls}">
         <span class="stat-pill-val">+${p.pts}</span>
         <span class="stat-pill-label">${esc(p.name)}</span>
-      </div>`).join('')
+      </div>`;
+      }).join('')
     : `<p class="hint" style="margin:0">Bonus points will appear here as matches are played.</p>`;
 
   // ── Award overview cards ──

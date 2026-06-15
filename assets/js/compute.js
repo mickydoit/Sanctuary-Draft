@@ -376,9 +376,9 @@ export function getStats(data, statsData) {
   for (const g of groups) { if (g.top) award(g.top); }
   for (const fa of fifaAwards) { if (fa.winner?.team_name) award(fa.winner.team_name); }
 
-  const bonusByPlayer = Object.entries(bonusMap)
-    .sort(([, a], [, b]) => b - a)
-    .map(([name, pts]) => ({ name, pts }));
+  const bonusByPlayer = players
+    .map((p) => ({ name: p.name, pts: bonusMap[p.name] || 0 }))
+    .sort((a, b) => b.pts - a.pts || a.name.localeCompare(b.name));
 
   return { goldenBoot, topAssists, mostRedCards, fairPlay, cleanSheets, groups, fifaAwards, bonusByPlayer };
 }

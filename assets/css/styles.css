@@ -1194,6 +1194,8 @@ body[data-route="stats"] {
 }
 .stat-pill.leader { background: linear-gradient(180deg, #caab3e 0%, #b1e8aa 100%); }
 .stat-pill.other  { background: #8bffec; }
+.stat-pill.zero   { background: rgba(255,255,255,.08); }
+.stat-pill.zero .stat-pill-val, .stat-pill.zero .stat-pill-label { color: rgba(255,255,255,.4); }
 .stat-pill-val {
   display: block;
   font-family: var(--font);
