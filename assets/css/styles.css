@@ -494,7 +494,8 @@ hr { border:none; border-top:1px solid var(--border); margin:1rem 0; width:100%;
 }
 .ladder-teams { text-align: left; font-family: var(--font); font-size: 1.15rem; font-weight: 800; }
 .ladder-pts   { text-align: right;  font-family: var(--font); font-size: 1.25rem; font-weight: 900; }
-.ladder-bonus { font-size: .7rem; font-weight: 700; color: #9FED00; opacity: .85; margin-left: .25em; vertical-align: super; }
+.ladder-bonus { font-size: .7rem; font-weight: 700; color: #9FED00; margin-left: .25em; vertical-align: super; }
+body[data-theme="light"] .ladder-bonus { color: #3a7d00; }
 
 /* ---- FIXTURES — gradient pill rows ---- */
 .fxgroup { margin-bottom: 2rem; }
