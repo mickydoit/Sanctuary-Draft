@@ -56,6 +56,7 @@ body[data-route="fixtures"] { --h1-color:#f4ff7b; --nav-active-bg:#f4ff7b; --nav
 body[data-route="bracket"]  { --h1-color:#4d7cff; --nav-active-bg:#4d7cff; --nav-active-color:#fff;    --hdr-text:rgba(255,255,255,.55); --hdr-text-full:#fff;    --hdr-hover-bg:rgba(255,255,255,.13); --bnav-icon-color:#F4FF7B; }
 body[data-route="draft"]    { --h1-color:#ff4b2b; --nav-active-bg:#ff4b2b; --nav-active-color:#fff;    --hdr-text:rgba(255,255,255,.55); --hdr-text-full:#fff;    --hdr-hover-bg:rgba(255,255,255,.13); --bnav-icon-color:#F4FF7B; }
 body[data-route="admin"], body[data-route=""] { --h1-color:#9333EA; --nav-active-bg:#9333EA; --nav-active-color:#fff; --hdr-text:rgba(255,255,255,.55); --hdr-text-full:#fff; --hdr-hover-bg:rgba(255,255,255,.13); --bnav-icon-color:#F4FF7B; }
+body[data-route="stats"]  { --h1-color:#9FED00; --nav-active-bg:#9FED00; --nav-active-color:#1e1e1e; --hdr-text:rgba(255,255,255,.55); --hdr-text-full:#fff; --hdr-hover-bg:rgba(255,255,255,.13); --bnav-icon-color:#9FED00; }
 
 
 /* ---- DARK MODE ---- */
@@ -828,6 +829,7 @@ body[data-route="bracket"] .container { max-width:100%; padding-left:0; padding-
   .bnav-teams    { -webkit-mask-image: url(../img/nav-teams.svg);    mask-image: url(../img/nav-teams.svg);    }
   .bnav-bracket  { -webkit-mask-image: url(../img/nav-bracket.svg);  mask-image: url(../img/nav-bracket.svg);  }
   .bnav-tips     { -webkit-mask-image: url(../img/nav-tips.svg);     mask-image: url(../img/nav-tips.svg);     }
+  .bnav-stats    { -webkit-mask-image: url(../img/nav-stats.svg);    mask-image: url(../img/nav-stats.svg);    }
   .bnav-admin    { -webkit-mask-image: url(../img/nav-admin.svg);    mask-image: url(../img/nav-admin.svg);    }
 
   body { padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px)); }

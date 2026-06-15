@@ -31,6 +31,7 @@ const NAV = [
   { route: '/fixtures', label: 'Fixtures', key: 'fixtures' },
   { route: '/bracket', label: 'Bracket', key: 'bracket' },
   { route: '/draft', label: 'Teams', key: 'draft' },
+  { route: '/stats', label: 'Stats', key: 'stats' },
 ];
 
 function currentRoute() {
@@ -79,6 +80,9 @@ function headerHtml(route) {
     </a>
     <a href="#/bracket" class="bnav-item ${ak === 'bracket' ? 'active' : ''}" aria-label="Bracket">
       <span class="bnav-icon bnav-bracket"></span>
+    </a>
+    <a href="#/stats" class="bnav-item ${ak === 'stats' ? 'active' : ''}" aria-label="Stats">
+      <span class="bnav-icon bnav-stats"></span>
     </a>
     <a href="${isAdmin ? '#/admin' : '#/login'}" class="bnav-item ${ak === 'admin' ? 'active' : ''}" aria-label="Admin">
       <span class="bnav-icon bnav-admin"></span>
