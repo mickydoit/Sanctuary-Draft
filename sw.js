@@ -1,4 +1,4 @@
-const CACHE = 'lbh-v3';
+const CACHE = 'lbh-v4';
 
 // Install immediately — don't wait for existing tabs to close
 self.addEventListener('install', () => self.skipWaiting());
