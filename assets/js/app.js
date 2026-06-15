@@ -167,14 +167,16 @@ async function render(opts = {}) {
         break;
       }
       case '/stats': {
-        const statsData = await store.loadStats();
+        let statsData = { playerStats: [], awardWinners: [] };
+        try { statsData = await store.loadStats(); } catch { /* show empty state */ }
         body = renderStats(getStats(data, statsData));
         break;
       }
       case '/admin':
         if (!isAdmin) { body = renderLogin(loginError); loginError = null; }
         else {
-          const adminStats = await store.loadStats();
+          let adminStats = { playerStats: [], awardWinners: [] };
+          try { adminStats = await store.loadStats(); } catch { /* ignore */ }
           body = renderAdmin({
             groups: getFixturesView(data),
             players: [...data.players].sort((a, b) => a.id - b.id),
