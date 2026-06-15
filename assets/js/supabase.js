@@ -53,3 +53,14 @@ export async function sbDelete(table, filter) {
   const res = await fetch(`${REST}/${table}?${filter}`, { method: 'DELETE', headers: headers({ Prefer: 'return=minimal' }) });
   return handle(res);
 }
+
+/** UPSERT: insert rows, updating on conflict for the named column(s). */
+export async function sbUpsert(table, rows, onConflict) {
+  const qs = onConflict ? `?on_conflict=${onConflict}` : '';
+  const res = await fetch(`${REST}/${table}${qs}`, {
+    method: 'POST',
+    headers: headers({ Prefer: 'resolution=merge-duplicates,return=minimal' }),
+    body: JSON.stringify(rows),
+  });
+  return handle(res);
+}

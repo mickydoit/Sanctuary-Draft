@@ -1,9 +1,9 @@
 // SPA router + event wiring. Hash-based routing so it works under any GitHub
 // Pages base path with no server rewrites.
 
-import { store } from './store.js?v=5';
-import { getLadder, getFixturesView, getBracket, getDraftState, getTeamsView, getPlayerView, getTeamView } from './compute.js?v=33';
-import { renderLadder, renderFixtures, renderBracket, renderDraft, renderAdmin, renderLogin, renderTeamsOverview, renderPlayerView, renderTeamView } from './views.js?v=33';
+import { store } from './store.js?v=6';
+import { getLadder, getFixturesView, getBracket, getDraftState, getTeamsView, getPlayerView, getTeamView, getStats } from './compute.js?v=34';
+import { renderLadder, renderFixtures, renderBracket, renderDraft, renderAdmin, renderLogin, renderTeamsOverview, renderPlayerView, renderTeamView, renderStats } from './views.js?v=34';
 
 const root = document.getElementById('root');
 const PASSWORD = (window.LBH_CONFIG || {}).ADMIN_PASSWORD || 'admin';
@@ -41,6 +41,7 @@ function activeKey(route) {
   if (route.startsWith('/fixtures')) return 'fixtures';
   if (route.startsWith('/bracket')) return 'bracket';
   if (route.startsWith('/draft')) return 'draft';
+  if (route.startsWith('/stats')) return 'stats';
   if (route.startsWith('/admin') || route.startsWith('/login')) return 'admin';
   return '';
 }
@@ -165,9 +166,15 @@ async function render(opts = {}) {
         }
         break;
       }
+      case '/stats': {
+        const statsData = await store.loadStats();
+        body = renderStats(getStats(data, statsData));
+        break;
+      }
       case '/admin':
         if (!isAdmin) { body = renderLogin(loginError); loginError = null; }
         else {
+          const adminStats = await store.loadStats();
           body = renderAdmin({
             groups: getFixturesView(data),
             players: [...data.players].sort((a, b) => a.id - b.id),
@@ -176,6 +183,7 @@ async function render(opts = {}) {
             mode: store.mode,
             notice: flash && flash.notice,
             problem: flash && flash.problem,
+            awardWinners: adminStats.awardWinners,
           });
           flash = null;
         }
@@ -216,7 +224,7 @@ function scrollToCurrentMatch(route) {
 // Ladder + fixtures refresh themselves so entered scores appear without a reload.
 function setAutoRefresh(route) {
   if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
-  if (route === '/' || route === '/fixtures') {
+  if (route === '/' || route === '/fixtures' || route === '/stats') {
     refreshTimer = setInterval(() => { if (currentRoute() === route) render(); }, 60000);
   } else if (route === '/draft') {
     // Waiting players poll so picks appear live; the person mid-pick isn't yanked.
@@ -282,6 +290,14 @@ root.addEventListener('submit', (e) => {
   } else if (action === 'settings') {
     const on = fd.get('scoreThirdPlace') != null;
     run(async () => { await store.setThirdPlace(on); flash = { notice: 'Settings saved.' }; });
+  } else if (action === 'set-fifa-award') {
+    const award = fd.get('award');
+    const playerName = String(fd.get('playerName') || '').trim();
+    const teamName = String(fd.get('teamName') || '').trim();
+    const notes = String(fd.get('notes') || '').trim();
+    if (!award) { window.alert('Select an award.'); return; }
+    if (!teamName) { window.alert('Select a team.'); return; }
+    run(async () => { await store.setAwardWinner(award, playerName || null, teamName, notes || null); flash = { notice: 'Award saved.' }; });
   } else if (action === 'add-fixture') {
     const stage = fd.get('stage');
     const homeTeamId = Number(fd.get('homeTeamId'));

@@ -3,7 +3,7 @@
 //   • localStorage (fallback) — this browser only, for a solo test run.
 // Both expose the same methods so the rest of the app doesn't care which is live.
 
-import { supabaseEnabled, sbSelect, sbInsert, sbUpdate, sbDelete } from './supabase.js?v=2';
+import { supabaseEnabled, sbSelect, sbInsert, sbUpdate, sbDelete, sbUpsert } from './supabase.js?v=3';
 import { TEAMS, DEFAULT_PLAYERS, TEAMS_PER_PLAYER } from './lib/teams.js?v=2';
 import { buildPickSequence, shuffle } from './lib/draft.js?v=2';
 import { buildGroupFixtures } from './lib/schedule2026.js?v=2';
@@ -110,6 +110,10 @@ const localBackend = {
     s.settings.score_third_place = Boolean(on);
     lsSave(s);
   },
+  async loadStats() {
+    return { playerStats: [], awardWinners: [] };
+  },
+  async setAwardWinner() { /* no-op for local mode */ },
 };
 
 // =========================================================================
@@ -172,6 +176,20 @@ const supabaseBackend = {
   },
   async setThirdPlace(on) {
     await sbUpdate('settings', 'id=eq.1', { score_third_place: Boolean(on) });
+  },
+  async loadStats() {
+    const [playerStats, awardWinners] = await Promise.all([
+      sbSelect('player_stats', 'select=*&order=goals.desc,assists.desc'),
+      sbSelect('award_winners', 'select=*'),
+    ]);
+    return { playerStats: playerStats || [], awardWinners: awardWinners || [] };
+  },
+  async setAwardWinner(award, playerName, teamName, notes) {
+    await sbUpsert(
+      'award_winners',
+      { award, player_name: playerName || null, team_name: teamName || null, notes: notes || null, awarded_at: nowIso() },
+      'award'
+    );
   },
 };
 

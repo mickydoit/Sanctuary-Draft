@@ -41,3 +41,8 @@ jobs:
             node scripts/sync-scores.mjs || echo "::warning::sync attempt $i failed, continuing"
             if [ "$i" -lt 5 ]; then sleep 55; fi
           done
+
+      - name: Sync player stats from ESPN
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: node scripts/sync-stats.mjs || echo "::warning::stats sync failed"
