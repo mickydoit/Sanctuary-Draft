@@ -2,8 +2,8 @@
 // Pages base path with no server rewrites.
 
 import { store } from './store.js?v=6';
-import { getLadder, getFixturesView, getBracket, getDraftState, getTeamsView, getPlayerView, getTeamView, getStats } from './compute.js?v=36';
-import { renderLadder, renderFixtures, renderBracket, renderDraft, renderAdmin, renderLogin, renderTeamsOverview, renderPlayerView, renderTeamView, renderStats } from './views.js?v=38';
+import { getLadder, getFixturesView, getBracket, getDraftState, getTeamsView, getPlayerView, getTeamView, getStats, getGroupStandings } from './compute.js?v=37';
+import { renderLadder, renderFixtures, renderBracket, renderDraft, renderAdmin, renderLogin, renderTeamsOverview, renderPlayerView, renderTeamView, renderStats } from './views.js?v=39';
 
 const root = document.getElementById('root');
 const PASSWORD = (window.LBH_CONFIG || {}).ADMIN_PASSWORD || 'admin';
@@ -199,7 +199,7 @@ async function render(opts = {}) {
         let ladderStats = { playerStats: [], awardWinners: [] };
         try { ladderStats = await store.loadStats(); } catch { /* show ladder without bonus */ }
         const ladderStatsResult = getStats(data, ladderStats);
-        body = renderLadder(getLadder(data, ladderStatsResult.bonusByPlayer));
+        body = renderLadder(getLadder(data, ladderStatsResult.bonusByPlayer), getGroupStandings(data));
         break;
       }
     }
