@@ -132,16 +132,23 @@ a:hover { text-decoration: underline; }
 /* ---- SPLASH / LOADING SCREEN ---- */
 #splash {
   position: fixed; inset: 0; z-index: 9999;
-  background: linear-gradient(135deg, #FCDB00 0%, #C9C120 50%, #7CAD2A 100%);
+  background: #f4f4f2;
   overflow: hidden;
 }
 #splash.splash-out { opacity: 0; pointer-events: none; transition: opacity .5s ease; }
+.splash-bg {
+  position: absolute;
+  inset: 0; width: 100%; height: 100%;
+  object-fit: cover;
+  z-index: 0;
+  pointer-events: none;
+}
 .splash-bg-img {
   position: absolute;
   left: 50%;
   bottom: -2dvh;
   transform: translateX(-50%);
-  height: clamp(440px, 58dvh, 620px);
+  height: clamp(440px, 62dvh, 640px);
   width: auto;
   z-index: 1;
   pointer-events: none;
@@ -153,20 +160,15 @@ a:hover { text-decoration: underline; }
   to   { opacity: 1; }
 }
 @media (max-height: 700px) {
-  .splash-bg-img { height: clamp(380px, 52dvh, 520px); bottom: -1dvh; }
+  .splash-bg-img { height: clamp(380px, 54dvh, 520px); bottom: -1dvh; }
 }
 @media (min-width: 768px) {
-  /* Anchor from top (just below the progress bar at ~31%) so the player's
-     face is always visible. Bottom overflows the viewport — that's fine. */
   .splash-bg-img {
     bottom: auto;
     top: 32%;
-    height: 78dvh;
+    height: 68dvh;
     transform: translateX(-50%);
   }
-}
-@media (max-width: 767px) {
-  .splash-bg-img { transform: translateX(-56%); }
 }
 .splash-logo-wrap {
   position: absolute;
@@ -180,13 +182,13 @@ a:hover { text-decoration: underline; }
 .splash-bar-track {
   position: absolute; top: 31%;
   left: 50%; transform: translateX(-50%);
-  width: 40%; height: 5px;
-  border-radius: 999px; background: rgba(0,0,0,.10); overflow: hidden;
+  width: 40%; height: 8px;
+  border-radius: 999px; background: rgba(0,0,0,.12); overflow: hidden;
   z-index: 2;
 }
 .splash-bar {
   height: 100%; border-radius: 999px;
-  background: linear-gradient(90deg, #a8ff00, #39ff14);
+  background: linear-gradient(90deg, #202123, #ffffff);
   transform: scaleX(0); transform-origin: left;
   animation: splash-load 4s cubic-bezier(.4,0,.2,1) forwards;
 }
