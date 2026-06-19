@@ -306,13 +306,13 @@ export function getStats(data, statsData) {
 
   // --- Golden Boot (top scorers) ---
   const goldenBoot = [...playerStats]
-    .sort((a, b) => b.goals - a.goals || b.assists - a.assists)
+    .sort((a, b) => (b.goals ?? 0) - (a.goals ?? 0) || (b.assists ?? 0) - (a.assists ?? 0))
     .slice(0, 5)
     .map((ps) => ({ ...ps, ownerName: getOwner(ps.team_name) }));
 
   // --- Top Assists ---
   const topAssists = [...playerStats]
-    .sort((a, b) => b.assists - a.assists || b.goals - a.goals)
+    .sort((a, b) => (b.assists ?? 0) - (a.assists ?? 0) || (b.goals ?? 0) - (a.goals ?? 0))
     .slice(0, 5)
     .map((ps) => ({ ...ps, ownerName: getOwner(ps.team_name) }));
 
@@ -321,21 +321,21 @@ export function getStats(data, statsData) {
   for (const ps of playerStats) {
     const k = ps.team_name;
     if (!cardsByTeam[k]) cardsByTeam[k] = { team_name: k, yellow_cards: 0, red_cards: 0 };
-    cardsByTeam[k].yellow_cards += ps.yellow_cards;
-    cardsByTeam[k].red_cards    += ps.red_cards;
+    cardsByTeam[k].yellow_cards += (ps.yellow_cards ?? 0);
+    cardsByTeam[k].red_cards    += (ps.red_cards ?? 0);
   }
   const teamCardList = Object.values(cardsByTeam);
 
   // --- Most Red Cards ---
   const mostRedCards = [...teamCardList]
-    .sort((a, b) => b.red_cards - a.red_cards || b.yellow_cards - a.yellow_cards)
+    .sort((a, b) => (b.red_cards ?? 0) - (a.red_cards ?? 0) || (b.yellow_cards ?? 0) - (a.yellow_cards ?? 0))
     .slice(0, 5)
     .map((tc) => ({ ...tc, ownerName: getOwner(tc.team_name) }));
 
   // --- Fair Play (fewest cards) ---
   const fairPlay = [...teamCardList]
     .filter((tc) => tc.yellow_cards > 0 || tc.red_cards > 0) // only teams with card data
-    .sort((a, b) => a.yellow_cards - b.yellow_cards || a.red_cards - b.red_cards)
+    .sort((a, b) => (a.yellow_cards ?? 0) - (b.yellow_cards ?? 0) || (a.red_cards ?? 0) - (b.red_cards ?? 0))
     .slice(0, 5)
     .map((tc) => ({ ...tc, ownerName: getOwner(tc.team_name) }));
 
@@ -415,11 +415,19 @@ export function getStats(data, statsData) {
     const o = getOwner(teamName);
     if (o) bonusMap[o] = (bonusMap[o] || 0) + 0.25;
   };
-  if (goldenBoot[0])   award(goldenBoot[0].team_name);
-  if (topAssists[0])   award(topAssists[0].team_name);
-  if (mostRedCards[0]) award(mostRedCards[0].team_name);
-  if (cleanSheets[0])  award(cleanSheets[0].team_name);
-  if (fairPlay[0])     award(fairPlay[0].team_name);
+  const awardTied = (arr, key) => {
+    if (!arr.length || (arr[0][key] ?? 0) === 0) return;
+    const top = arr[0][key];
+    for (const item of arr) {
+      if ((item[key] ?? 0) === top) award(item.team_name);
+      else break;
+    }
+  };
+  awardTied(goldenBoot,   'goals');
+  awardTied(topAssists,   'assists');
+  awardTied(mostRedCards, 'red_cards');
+  awardTied(cleanSheets,  'clean_sheets');
+  awardTied(fairPlay,     'yellow_cards');
   for (const g of groups) { if (g.top) award(g.top); }
   for (const fa of fifaAwards) { if (fa.winner?.team_name) award(fa.winner.team_name); }
 
