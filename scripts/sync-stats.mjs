@@ -52,13 +52,24 @@ for (const fx of fixtures) {
 
 let totalRows = 0;
 
-for (const [date, dayFixtures] of Object.entries(byDate)) {
-  // Build a lookup from sorted-team-key → our fixture.
-  const fxByKey = {};
-  for (const fx of dayFixtures) {
-    fxByKey[matchKey(fx.home_team, fx.away_team)] = fx;
-  }
+// Build a global lookup across ALL dates so ESPN date ≠ UTC date mismatches still resolve.
+const fxByKey = {};
+for (const fx of fixtures) {
+  fxByKey[matchKey(fx.home_team, fx.away_team)] = fx;
+}
 
+// Collect unique dates and also the day before/after each to handle TZ offsets.
+const dateSet = new Set();
+for (const date of Object.keys(byDate)) {
+  const ms = new Date(`${date.slice(0,4)}-${date.slice(4,6)}-${date.slice(6,8)}T12:00:00Z`).getTime();
+  for (const delta of [-86400000, 0, 86400000]) {
+    dateSet.add(new Date(ms + delta).toISOString().slice(0, 10).replace(/-/g, ''));
+  }
+}
+
+const seenEventIds = new Set();
+
+for (const date of [...dateSet].sort()) {
   // Fetch ESPN scoreboard for this calendar date.
   let espnEvents = [];
   try {
@@ -69,16 +80,25 @@ for (const [date, dayFixtures] of Object.entries(byDate)) {
     console.warn(`  ⚠ ESPN scoreboard ${date}: ${err.message}`);
     continue;
   }
+  console.log(`  [${date}] ESPN events: ${espnEvents.length}`);
 
   for (const event of espnEvents) {
+    if (seenEventIds.has(event.id)) continue;
+    seenEventIds.add(event.id);
+
     const comp  = event.competitions?.[0];
     const home  = comp?.competitors?.find(c => c.homeAway === 'home');
     const away  = comp?.competitors?.find(c => c.homeAway === 'away');
     if (!home || !away) continue;
 
-    const key = matchKey(home.team?.displayName || '', away.team?.displayName || '');
+    const espnHome = home.team?.displayName || '';
+    const espnAway = away.team?.displayName || '';
+    const key = matchKey(espnHome, espnAway);
     const fx  = fxByKey[key];
-    if (!fx) continue;
+    if (!fx) {
+      console.log(`    no match: "${espnHome}" vs "${espnAway}" (key="${key}")`);
+      continue;
+    }
 
     try {
       const res = await fetch(`${SUMMARY}?event=${event.id}`);
