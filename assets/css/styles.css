@@ -1304,8 +1304,8 @@ body[data-route="stats"] {
 @media (min-width: 540px) { .awards-grid { grid-template-columns: repeat(3, 1fr); } }
 
 .award-card {
-  background: #393939;
-  border: 1px solid #808080;
+  background: var(--bg-2);
+  border: 1px solid var(--border-em);
   border-radius: 12px;
   padding: 1.1rem 1rem 1rem;
 }
@@ -1375,8 +1375,8 @@ body[data-route="stats"] {
 /* ── Stat table ── */
 .stat-section { margin-bottom: 1.5rem; }
 .stat-table {
-  background: #393939;
-  border: 1px solid #808080;
+  background: var(--bg-2);
+  border: 1px solid var(--border-em);
   border-radius: 12px;
   overflow: hidden;
 }
@@ -1386,7 +1386,7 @@ body[data-route="stats"] {
   align-items: center;
   gap: .5rem;
   padding: .85rem 1.1rem;
-  border-bottom: 1px solid rgba(128,128,128,.25);
+  border-bottom: 1px solid var(--border);
 }
 .stat-row:last-child { border-bottom: none; }
 .stat-row.stat-head {
@@ -1436,8 +1436,8 @@ body[data-route="stats"] {
 @media (min-width: 640px) { .group-grid { grid-template-columns: repeat(6, 1fr); } }
 
 .group-chip {
-  background: #393939;
-  border: 1px solid #808080;
+  background: var(--bg-2);
+  border: 1px solid var(--border-em);
   border-radius: 12px;
   padding: .85rem .65rem;
   text-align: center;
@@ -1478,8 +1478,8 @@ body[data-route="stats"] {
 /* ── FIFA awards pending cards ── */
 .fifa-award-list { display: flex; flex-direction: column; gap: .6rem; }
 .fifa-pending-card {
-  background: #393939;
-  border: 1px solid #808080;
+  background: var(--bg-2);
+  border: 1px solid var(--border-em);
   border-radius: 12px;
   padding: 1.2rem 1.1rem;
   display: flex;
