@@ -179,7 +179,7 @@ const supabaseBackend = {
   },
   async loadStats() {
     const [playerStats, awardWinners] = await Promise.all([
-      sbSelect('player_stats', 'select=*&order=goals.desc,assists.desc'),
+      sbSelect('player_stats_agg', 'select=*&order=goals.desc,assists.desc'),
       sbSelect('award_winners', 'select=*'),
     ]);
     return { playerStats: playerStats || [], awardWinners: awardWinners || [] };
