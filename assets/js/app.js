@@ -1,7 +1,7 @@
 // SPA router + event wiring. Hash-based routing so it works under any GitHub
 // Pages base path with no server rewrites.
 
-import { store } from './store.js?v=7';
+import { store } from './store.js?v=8';
 import { getLadder, getFixturesView, getBracket, getDraftState, getTeamsView, getPlayerView, getTeamView, getStats, getGroupStandings } from './compute.js?v=38';
 import { renderLadder, renderFixtures, renderBracket, renderDraft, renderAdmin, renderLogin, renderTeamsOverview, renderPlayerView, renderTeamView, renderStats } from './views.js?v=39';
 

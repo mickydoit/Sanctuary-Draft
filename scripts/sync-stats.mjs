@@ -1,7 +1,6 @@
 // Fetch per-player stats from ESPN for every finished fixture.
-// Stats are stored per-game (fixture_id) so re-running is always safe —
-// each sync overwrites that game's rows rather than accumulating.
-// A Postgres view (player_stats_agg) sums totals for the client.
+// Aggregates all games per player in JS, then upserts totals with overwrite
+// (not accumulation) so every run produces correct numbers regardless of order.
 //
 // Usage:
 //   DATABASE_URL="postgres://…supabase…" node scripts/sync-stats.mjs
@@ -22,7 +21,6 @@ function matchKey(a, b) {
   return [normalizeTeamName(a), normalizeTeamName(b)].map(n => n.toLowerCase()).sort().join('|');
 }
 
-// All finished fixtures — no stats_synced_at filter so every run is idempotent.
 const { rows: fixtures } = await query(`
   SELECT f.id, f.kickoff,
          th.name AS home_team,
@@ -49,15 +47,13 @@ for (const fx of fixtures) {
   (byDate[d] ||= []).push(fx);
 }
 
-// Global key → fixture map. A single fxByKey across all dates handles the case
-// where ESPN's local date differs from the UTC kickoff date.
+// Global key → fixture map so ESPN date ≠ UTC date mismatches still resolve.
 const fxByKey = {};
 for (const fx of fixtures) {
   fxByKey[matchKey(fx.home_team, fx.away_team)] = fx;
 }
 
-// Query ESPN for each UTC date ±1 day to cover timezone differences
-// (e.g. a 02:00 UTC kickoff is the previous calendar day in US time).
+// Query ESPN for each UTC date ±1 day to cover timezone differences.
 const dateSet = new Set();
 for (const date of Object.keys(byDate)) {
   const ms = new Date(`${date.slice(0,4)}-${date.slice(4,6)}-${date.slice(6,8)}T12:00:00Z`).getTime();
@@ -66,8 +62,10 @@ for (const date of Object.keys(byDate)) {
   }
 }
 
+// Accumulate all per-game rows into per-player totals before writing to DB.
 const seenEventIds = new Set();
-let totalRows = 0;
+const seenFixtureIds = new Set();
+const playerTotals = {}; // key → { player_name, team_name, goals, assists, yellow_cards, red_cards }
 
 for (const date of [...dateSet].sort()) {
   let espnEvents = [];
@@ -91,7 +89,8 @@ for (const date of [...dateSet].sort()) {
 
     const key = matchKey(home.team?.displayName || '', away.team?.displayName || '');
     const fx  = fxByKey[key];
-    if (!fx) continue;
+    if (!fx || seenFixtureIds.has(fx.id)) continue;
+    seenFixtureIds.add(fx.id);
 
     try {
       const res = await fetch(`${SUMMARY}?event=${event.id}`);
@@ -100,25 +99,37 @@ for (const date of [...dateSet].sort()) {
       console.log(`  ${fx.home_team} vs ${fx.away_team} (ESPN ${event.id}): ${players.length} stat rows`);
 
       for (const p of players) {
-        await query(
-          `INSERT INTO player_stats
-             (fixture_id, player_name, team_name, goals, assists, yellow_cards, red_cards, synced_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, now())
-           ON CONFLICT (fixture_id, player_name, team_name) DO UPDATE SET
-             goals        = EXCLUDED.goals,
-             assists      = EXCLUDED.assists,
-             yellow_cards = EXCLUDED.yellow_cards,
-             red_cards    = EXCLUDED.red_cards,
-             synced_at    = now()`,
-          [fx.id, p.player_name, p.team_name, p.goals, p.assists, p.yellow_cards, p.red_cards]
-        );
+        const k = `${p.player_name}||${p.team_name}`;
+        if (!playerTotals[k]) {
+          playerTotals[k] = { player_name: p.player_name, team_name: p.team_name, goals: 0, assists: 0, yellow_cards: 0, red_cards: 0 };
+        }
+        playerTotals[k].goals        += p.goals;
+        playerTotals[k].assists      += p.assists;
+        playerTotals[k].yellow_cards += p.yellow_cards;
+        playerTotals[k].red_cards    += p.red_cards;
       }
-
-      totalRows += players.length;
     } catch (err) {
       console.warn(`  ⚠ ${fx.home_team} vs ${fx.away_team} (ESPN ${event.id}): ${err.message}`);
     }
   }
 }
 
-console.log(`[sync-stats] Done — ${totalRows} player stat rows upserted.`);
+// Upsert aggregated totals — overwrite so re-running is always idempotent.
+const totals = Object.values(playerTotals);
+console.log(`[sync-stats] Upserting ${totals.length} player totals…`);
+for (const p of totals) {
+  await query(
+    `INSERT INTO player_stats
+       (player_name, team_name, goals, assists, yellow_cards, red_cards, synced_at)
+     VALUES ($1, $2, $3, $4, $5, $6, now())
+     ON CONFLICT (player_name, team_name) DO UPDATE SET
+       goals        = EXCLUDED.goals,
+       assists      = EXCLUDED.assists,
+       yellow_cards = EXCLUDED.yellow_cards,
+       red_cards    = EXCLUDED.red_cards,
+       synced_at    = now()`,
+    [p.player_name, p.team_name, p.goals, p.assists, p.yellow_cards, p.red_cards]
+  );
+}
+
+console.log(`[sync-stats] Done.`);
