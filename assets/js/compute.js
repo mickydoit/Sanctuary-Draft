@@ -75,6 +75,13 @@ function outcomeOf(f) {
   return null;
 }
 
+
+const FIFA_AWARDS = [
+  { key: 'golden_glove',       label: 'Golden Glove',           desc: 'Best goalkeeper — announced by FIFA. Owner of that keeper\'s team wins.' },
+  { key: 'best_young_player',  label: 'Best Young Player',      desc: 'FIFA\'s best U21 player. Owner of that player\'s team wins.' },
+  { key: 'goal_of_tournament', label: 'Goal of the Tournament',  desc: 'FIFA fan vote. Owner of the scoring player\'s team wins.' },
+];
+
 export function getDraftState(data) {
   const { settings, picks, teams } = data;
   const started = settings.draft_status !== 'not_started';
@@ -223,7 +230,7 @@ export function getBracket(data, r32Overlay = []) {
   return { rounds, thirdPlace: (byStage.third || [])[0] || null, hasAny: ko.length > 0 };
 }
 
-export function getLadder(data) {
+export function getLadder(data, bonusByPlayer = []) {
   const ownership = ownershipMap(data.picks);
   const finished = data.fixtures
     .filter((f) => f.status === 'finished')
@@ -238,8 +245,14 @@ export function getLadder(data) {
     if (alive(pick.team_id)) teamCounts[pick.player_id] = (teamCounts[pick.player_id] || 0) + 1;
   }
 
+  const bonusMap = Object.fromEntries((bonusByPlayer || []).map(({ name, pts }) => [name, pts]));
+
   const current = [...data.players]
-    .map((p) => ({ ...p, points: totals[p.id] ?? 0, teamCount: teamCounts[p.id] ?? 0 }))
+    .map((p) => {
+      const base = totals[p.id] ?? 0;
+      const bonus = bonusMap[p.name] ?? 0;
+      return { ...p, points: base + bonus, basePoints: base, bonusPoints: bonus, teamCount: teamCounts[p.id] ?? 0 };
+    })
     .sort((a, b) => b.points - a.points || a.name.localeCompare(b.name));
 
   // Movement: compare current rank to rank before the last completed matchday
@@ -254,7 +267,7 @@ export function getLadder(data) {
       .map(f => ({ id: f.id, stage: f.stage, homeTeamId: f.home_team_id, awayTeamId: f.away_team_id, homeScore: f.home_score, awayScore: f.away_score, winnerTeamId: f.winner_team_id }));
     const prevTotals = computeLadder(prevFin, { ownership, stagePoints });
     const prevRanked = [...data.players]
-      .map(p => ({ id: p.id, name: p.name, pts: prevTotals[p.id] ?? 0 }))
+      .map(p => ({ id: p.id, name: p.name, pts: (prevTotals[p.id] ?? 0) + (bonusMap[p.name] ?? 0) }))
       .sort((a, b) => b.pts - a.pts || a.name.localeCompare(b.name));
     prevRankById = Object.fromEntries(prevRanked.map((p, i) => [p.id, i + 1]));
   }
@@ -491,4 +504,119 @@ export function resolveEspnSlot(displayName, groupPositions) {
   if (runnerMatch) return groupPositions[`Group ${runnerMatch[1]}`]?.runnerUp || null;
   // Third-place aggregated slot — can't resolve yet
   return null;
+}
+
+export function getStats(data, statsData) {
+  const { playerStats = [], awardWinners = [] } = statsData || {};
+  const { teams, picks, players, fixtures } = data;
+
+  const playerById2 = byId(players);
+  const ownerByTeamName = {};
+  for (const pick of picks) {
+    const t = teams.find((x) => x.id === pick.team_id);
+    if (t) ownerByTeamName[t.name.toLowerCase()] = (playerById2[pick.player_id] || {}).name || null;
+  }
+  const getOwner = (teamName) => ownerByTeamName[(teamName || '').toLowerCase()] || null;
+
+  const goldenBoot = [...playerStats]
+    .sort((a, b) => (b.goals ?? 0) - (a.goals ?? 0) || (b.assists ?? 0) - (a.assists ?? 0))
+    .slice(0, 5)
+    .map((ps) => ({ ...ps, ownerName: getOwner(ps.team_name) }));
+
+  const topAssists = [...playerStats]
+    .sort((a, b) => (b.assists ?? 0) - (a.assists ?? 0) || (b.goals ?? 0) - (a.goals ?? 0))
+    .slice(0, 5)
+    .map((ps) => ({ ...ps, ownerName: getOwner(ps.team_name) }));
+
+  const cardsByTeam = {};
+  for (const ps of playerStats) {
+    const k = ps.team_name;
+    if (!cardsByTeam[k]) cardsByTeam[k] = { team_name: k, yellow_cards: 0, red_cards: 0 };
+    cardsByTeam[k].yellow_cards += (ps.yellow_cards ?? 0);
+    cardsByTeam[k].red_cards    += (ps.red_cards ?? 0);
+  }
+  const teamCardList = Object.values(cardsByTeam);
+
+  const mostRedCards = [...teamCardList]
+    .sort((a, b) => (b.red_cards ?? 0) - (a.red_cards ?? 0) || (b.yellow_cards ?? 0) - (a.yellow_cards ?? 0))
+    .slice(0, 5)
+    .map((tc) => ({ ...tc, ownerName: getOwner(tc.team_name) }));
+
+  const fairPlay = [...teamCardList]
+    .filter((tc) => tc.yellow_cards > 0 || tc.red_cards > 0)
+    .sort((a, b) => (a.yellow_cards ?? 0) - (b.yellow_cards ?? 0) || (a.red_cards ?? 0) - (b.red_cards ?? 0))
+    .slice(0, 5)
+    .map((tc) => ({ ...tc, ownerName: getOwner(tc.team_name) }));
+
+  const csMap = {};
+  const gaMap = {};
+  const teamNameById = Object.fromEntries(teams.map((t) => [t.id, t.name]));
+  for (const f of fixtures) {
+    if (f.status !== 'finished' || f.home_score == null || f.away_score == null) continue;
+    const hn = teamNameById[f.home_team_id];
+    const an = teamNameById[f.away_team_id];
+    if (hn) { gaMap[hn] = (gaMap[hn] || 0) + f.away_score; if (f.away_score === 0) csMap[hn] = (csMap[hn] || 0) + 1; }
+    if (an) { gaMap[an] = (gaMap[an] || 0) + f.home_score; if (f.home_score === 0) csMap[an] = (csMap[an] || 0) + 1; }
+  }
+  const cleanSheets = Object.entries(csMap)
+    .map(([name, cs]) => ({ team_name: name, clean_sheets: cs, goals_against: gaMap[name] || 0, ownerName: getOwner(name) }))
+    .sort((a, b) => b.clean_sheets - a.clean_sheets || a.goals_against - b.goals_against)
+    .slice(0, 5);
+
+  const allGroups = [...new Set(teams.filter((t) => t.grp).map((t) => t.grp))].sort();
+  const gStandings = {};
+  for (const f of fixtures) {
+    if (f.stage !== 'group' || f.status !== 'finished' || f.home_score == null) continue;
+    const grp = f.grp || '?';
+    if (!gStandings[grp]) gStandings[grp] = {};
+    for (const [tid, scored, conceded] of [
+      [f.home_team_id, f.home_score, f.away_score],
+      [f.away_team_id, f.away_score, f.home_score],
+    ]) {
+      if (!tid) continue;
+      if (!gStandings[grp][tid]) gStandings[grp][tid] = { teamId: tid, pts: 0, gd: 0, played: 0 };
+      const row = gStandings[grp][tid];
+      row.played++;
+      row.gd += scored - conceded;
+      if (scored > conceded) row.pts += 3;
+      else if (scored === conceded) row.pts += 1;
+    }
+  }
+
+  const groups = allGroups.map((grp) => {
+    const standings = gStandings[grp];
+    if (!standings || !Object.keys(standings).length) return { grp, top: null, pts: null, played: false };
+    const sorted = Object.values(standings).sort((a, b) => b.pts - a.pts || b.gd - a.gd);
+    const topRow = sorted[0];
+    const team = teams.find((t) => t.id === topRow.teamId);
+    const complete = sorted.every((r) => r.played >= 3);
+    return { grp, top: team ? team.name : null, pts: topRow.pts, played: true, complete, ownerName: team ? getOwner(team.name) : null };
+  });
+
+  const awardsMap = Object.fromEntries(awardWinners.map((a) => [a.award, a]));
+  const fifaAwards = FIFA_AWARDS.map((def) => {
+    const w = awardsMap[def.key] || null;
+    return { ...def, winner: w, ownerName: w?.team_name ? getOwner(w.team_name) : null };
+  });
+
+  const bonusMap = {};
+  const award = (teamName) => { const o = getOwner(teamName); if (o) bonusMap[o] = (bonusMap[o] || 0) + 0.25; };
+  const awardTied = (arr, key) => {
+    if (!arr.length || (arr[0][key] ?? 0) === 0) return;
+    const top = arr[0][key];
+    for (const item of arr) { if ((item[key] ?? 0) === top) award(item.team_name); else break; }
+  };
+  awardTied(goldenBoot,   'goals');
+  awardTied(topAssists,   'assists');
+  awardTied(mostRedCards, 'red_cards');
+  awardTied(cleanSheets,  'clean_sheets');
+  awardTied(fairPlay,     'yellow_cards');
+  for (const g of groups) { if (g.top) award(g.top); }
+  for (const fa of fifaAwards) { if (fa.winner?.team_name) award(fa.winner.team_name); }
+
+  const bonusByPlayer = players
+    .map((p) => ({ name: p.name, pts: bonusMap[p.name] || 0 }))
+    .sort((a, b) => b.pts - a.pts || a.name.localeCompare(b.name));
+
+  return { goldenBoot, topAssists, mostRedCards, fairPlay, cleanSheets, groups, fifaAwards, bonusByPlayer };
 }
