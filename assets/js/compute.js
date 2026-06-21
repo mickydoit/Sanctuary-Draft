@@ -3,7 +3,7 @@
 // rules engine (lib/scoring.js, lib/draft.js).
 
 import { buildPickSequence } from './lib/draft.js?v=2';
-import { computeLadder, DEFAULT_STAGE_POINTS } from './lib/scoring.js?v=2';
+import { computeLadder, DEFAULT_STAGE_POINTS } from './lib/scoring.js?v=3';
 import { TEAMS_PER_PLAYER } from './lib/teams.js?v=2';
 
 const DISPLAY_TZ = 'Australia/Sydney';
@@ -16,6 +16,9 @@ const byId = (rows) => Object.fromEntries(rows.map((r) => [r.id, r]));
 const ownershipMap = (picks) => Object.fromEntries(picks.map((p) => [p.team_id, p.player_id]));
 
 const KO_STAGES = ['R32', 'R16', 'QF', 'SF', 'third', 'final'];
+
+// Tips lock — and everyone's picks are then revealed — this long before kickoff.
+const TIP_LOCK_MS = 60 * 60 * 1000; // 1 hour
 
 // Returns a predicate (teamId) => still in the tournament.
 // A team is out if it lost a finished knockout match, or — once the knockout
@@ -47,6 +50,29 @@ function survivingTeams(fixtures) {
 function rankSort(a, b) {
   const ra = a.ranking ?? Infinity, rb = b.ranking ?? Infinity;
   return ra - rb || String(a.name).localeCompare(String(b.name));
+}
+
+// The decided outcome of a FINISHED fixture, for tip-checking. 'home' | 'draw' |
+// 'away' | null (not finished / undecided). Group games are read from the score;
+// knockouts use the advancing team (so penalty wins resolve correctly), falling
+// back to the score if no winner was recorded.
+function outcomeOf(f) {
+  if (f.status !== 'finished') return null;
+  if (!KO_STAGES.includes(f.stage)) {
+    if (f.home_score == null || f.away_score == null) return null;
+    if (f.home_score > f.away_score) return 'home';
+    if (f.home_score < f.away_score) return 'away';
+    return 'draw';
+  }
+  if (f.winner_team_id != null) {
+    if (f.winner_team_id === f.home_team_id) return 'home';
+    if (f.winner_team_id === f.away_team_id) return 'away';
+  }
+  if (f.home_score != null && f.away_score != null) {
+    if (f.home_score > f.away_score) return 'home';
+    if (f.home_score < f.away_score) return 'away';
+  }
+  return null;
 }
 
 export function getDraftState(data) {
@@ -169,7 +195,7 @@ export function getBracket(data) {
   return { rounds, thirdPlace: (byStage.third || [])[0] || null, hasAny: ko.length > 0 };
 }
 
-export function getLadder(data, bonusByPlayer = []) {
+export function getLadder(data) {
   const ownership = ownershipMap(data.picks);
   const finished = data.fixtures
     .filter((f) => f.status === 'finished')
@@ -184,14 +210,8 @@ export function getLadder(data, bonusByPlayer = []) {
     if (alive(pick.team_id)) teamCounts[pick.player_id] = (teamCounts[pick.player_id] || 0) + 1;
   }
 
-  const bonusMap = Object.fromEntries(bonusByPlayer.map(({ name, pts }) => [name, pts]));
-
   const current = [...data.players]
-    .map((p) => {
-      const base = totals[p.id] ?? 0;
-      const bonus = bonusMap[p.name] ?? 0;
-      return { ...p, points: base + bonus, basePoints: base, bonusPoints: bonus, teamCount: teamCounts[p.id] ?? 0 };
-    })
+    .map((p) => ({ ...p, points: totals[p.id] ?? 0, teamCount: teamCounts[p.id] ?? 0 }))
     .sort((a, b) => b.points - a.points || a.name.localeCompare(b.name));
 
   // Movement: compare current rank to rank before the last completed matchday
@@ -206,7 +226,7 @@ export function getLadder(data, bonusByPlayer = []) {
       .map(f => ({ id: f.id, stage: f.stage, homeTeamId: f.home_team_id, awayTeamId: f.away_team_id, homeScore: f.home_score, awayScore: f.away_score, winnerTeamId: f.winner_team_id }));
     const prevTotals = computeLadder(prevFin, { ownership, stagePoints });
     const prevRanked = [...data.players]
-      .map(p => ({ id: p.id, name: p.name, pts: (prevTotals[p.id] ?? 0) + (bonusMap[p.name] ?? 0) }))
+      .map(p => ({ id: p.id, name: p.name, pts: prevTotals[p.id] ?? 0 }))
       .sort((a, b) => b.pts - a.pts || a.name.localeCompare(b.name));
     prevRankById = Object.fromEntries(prevRanked.map((p, i) => [p.id, i + 1]));
   }
@@ -284,156 +304,121 @@ export function getTeamView(data, teamId) {
   };
 }
 
-// ---------------------------------------------------------------- Stats
-const FIFA_AWARDS = [
-  { key: 'golden_glove',      label: 'Golden Glove',          desc: 'Best goalkeeper — announced by FIFA. Owner of that keeper\'s team wins.' },
-  { key: 'best_young_player', label: 'Best Young Player',     desc: 'FIFA\'s best U21 player. Owner of that player\'s team wins.' },
-  { key: 'goal_of_tournament',label: 'Goal of the Tournament',desc: 'FIFA fan vote. Owner of the scoring player\'s team wins.' },
-];
+// ---------------------------------------------------------------- Tipping
+// Standings for the tipping game: 1 point per correct tip. `tipped` is how many
+// finished matches a mate submitted a tip for (the denominator).
+export function getTipLadder(data) {
+  const outcomes = {};
+  for (const f of data.fixtures) if (f.status === 'finished') outcomes[f.id] = outcomeOf(f);
 
-export function getStats(data, statsData) {
-  const { playerStats = [], awardWinners = [] } = statsData || {};
-  const { teams, picks, players, fixtures } = data;
-
-  // team name (lowercase) → owner's display name
-  const playerById2 = byId(players);
-  const ownerByTeamName = {};
-  for (const pick of picks) {
-    const t = teams.find((x) => x.id === pick.team_id);
-    if (t) ownerByTeamName[t.name.toLowerCase()] = (playerById2[pick.player_id] || {}).name || null;
-  }
-  const getOwner = (teamName) => ownerByTeamName[(teamName || '').toLowerCase()] || null;
-
-  // --- Golden Boot (top scorers) ---
-  const goldenBoot = [...playerStats]
-    .sort((a, b) => (b.goals ?? 0) - (a.goals ?? 0) || (b.assists ?? 0) - (a.assists ?? 0))
-    .slice(0, 5)
-    .map((ps) => ({ ...ps, ownerName: getOwner(ps.team_name) }));
-
-  // --- Top Assists ---
-  const topAssists = [...playerStats]
-    .sort((a, b) => (b.assists ?? 0) - (a.assists ?? 0) || (b.goals ?? 0) - (a.goals ?? 0))
-    .slice(0, 5)
-    .map((ps) => ({ ...ps, ownerName: getOwner(ps.team_name) }));
-
-  // --- Cards per team (aggregate from player_stats) ---
-  const cardsByTeam = {};
-  for (const ps of playerStats) {
-    const k = ps.team_name;
-    if (!cardsByTeam[k]) cardsByTeam[k] = { team_name: k, yellow_cards: 0, red_cards: 0 };
-    cardsByTeam[k].yellow_cards += (ps.yellow_cards ?? 0);
-    cardsByTeam[k].red_cards    += (ps.red_cards ?? 0);
-  }
-  const teamCardList = Object.values(cardsByTeam);
-
-  // --- Most Red Cards ---
-  const mostRedCards = [...teamCardList]
-    .sort((a, b) => (b.red_cards ?? 0) - (a.red_cards ?? 0) || (b.yellow_cards ?? 0) - (a.yellow_cards ?? 0))
-    .slice(0, 5)
-    .map((tc) => ({ ...tc, ownerName: getOwner(tc.team_name) }));
-
-  // --- Fair Play (fewest cards) ---
-  const fairPlay = [...teamCardList]
-    .filter((tc) => tc.yellow_cards > 0 || tc.red_cards > 0) // only teams with card data
-    .sort((a, b) => (a.yellow_cards ?? 0) - (b.yellow_cards ?? 0) || (a.red_cards ?? 0) - (b.red_cards ?? 0))
-    .slice(0, 5)
-    .map((tc) => ({ ...tc, ownerName: getOwner(tc.team_name) }));
-
-  // --- Clean Sheets (computed from fixtures table) ---
-  const csMap = {};
-  const gaMap = {};
-  const teamNameById = Object.fromEntries(teams.map((t) => [t.id, t.name]));
-  for (const f of fixtures) {
-    if (f.status !== 'finished' || f.home_score == null || f.away_score == null) continue;
-    const hn = teamNameById[f.home_team_id];
-    const an = teamNameById[f.away_team_id];
-    if (hn) {
-      gaMap[hn] = (gaMap[hn] || 0) + f.away_score;
-      if (f.away_score === 0) csMap[hn] = (csMap[hn] || 0) + 1;
-    }
-    if (an) {
-      gaMap[an] = (gaMap[an] || 0) + f.home_score;
-      if (f.home_score === 0) csMap[an] = (csMap[an] || 0) + 1;
-    }
-  }
-  const cleanSheets = Object.entries(csMap)
-    .map(([name, cs]) => ({ team_name: name, clean_sheets: cs, goals_against: gaMap[name] || 0, ownerName: getOwner(name) }))
-    .sort((a, b) => b.clean_sheets - a.clean_sheets || a.goals_against - b.goals_against)
-    .slice(0, 5);
-
-  // --- Group Standings (computed from fixtures) ---
-  const allGroups = [...new Set(teams.filter((t) => t.grp).map((t) => t.grp))].sort();
-  const gStandings = {}; // grp → { teamId → { pts, gd, played } }
-  for (const f of fixtures) {
-    if (f.stage !== 'group' || f.status !== 'finished' || f.home_score == null) continue;
-    const grp = f.grp || '?';
-    if (!gStandings[grp]) gStandings[grp] = {};
-    for (const [tid, scored, conceded] of [
-      [f.home_team_id, f.home_score, f.away_score],
-      [f.away_team_id, f.away_score, f.home_score],
-    ]) {
-      if (!tid) continue;
-      if (!gStandings[grp][tid]) gStandings[grp][tid] = { teamId: tid, pts: 0, gd: 0, played: 0 };
-      const row = gStandings[grp][tid];
-      row.played++;
-      row.gd += scored - conceded;
-      if (scored > conceded) row.pts += 3;
-      else if (scored === conceded) row.pts += 1;
-    }
+  const stats = {};
+  for (const p of data.players) stats[p.id] = { tipped: 0, points: 0 };
+  for (const t of data.tips || []) {
+    const outcome = outcomes[t.fixture_id];
+    if (outcome == null) continue; // match not finished, or finished without a usable result yet
+    (stats[t.player_id] ||= { tipped: 0, points: 0 }).tipped += 1;
+    if (t.pick === outcome) stats[t.player_id].points += 1;
   }
 
-  const groups = allGroups.map((grp) => {
-    const standings = gStandings[grp];
-    if (!standings || !Object.keys(standings).length) {
-      return { grp, top: null, pts: null, played: false };
-    }
-    const sorted = Object.values(standings).sort((a, b) => b.pts - a.pts || b.gd - a.gd);
-    const topRow = sorted[0];
-    const team = teams.find((t) => t.id === topRow.teamId);
-    // Only confirmed as "top" if group play is complete (3 matches per team = 3 matchdays)
-    const complete = sorted.every((r) => r.played >= 3);
+  return [...data.players]
+    .map((p) => ({ ...p, tipped: stats[p.id].tipped, points: stats[p.id].points }))
+    .sort((a, b) => b.points - a.points || b.tipped - a.tipped || a.name.localeCompare(b.name));
+}
+
+// Tipping page model. Splits matches into `toTip` (still tippable) and `results`
+// (locked or played), each grouped by date into day-block accordions like the
+// fixtures page. Each mate's pick is hidden from the others until kickoff:
+// `allTips` is only populated once a match is `locked`.
+export function getTipsView(data, myId) {
+  const teamById = byId(data.teams);
+  const owners = ownerNames(data);
+  const players = [...data.players].sort((a, b) => a.id - b.id);
+  const now = Date.now();
+
+  const tipsByFixture = {};
+  for (const t of data.tips || []) (tipsByFixture[t.fixture_id] ||= []).push(t);
+
+  const decorate = (f) => {
+    const d = decorateFixture(f, teamById, owners);
+    const ko = f.kickoff ? Date.parse(f.kickoff) : null;
+    const locked = f.status === 'finished' || (ko != null && ko - TIP_LOCK_MS <= now);
+    const fixtureTips = tipsByFixture[f.id] || [];
+    const myTip = myId ? fixtureTips.find((t) => t.player_id === myId) : null;
+    const outcome = outcomeOf(f);
+    const allTips = locked
+      ? players.map((p) => {
+          const tp = fixtureTips.find((t) => t.player_id === p.id);
+          const pick = tp ? tp.pick : null;
+          return { name: p.name, pick, correct: pick != null && outcome != null && pick === outcome };
+        })
+      : null;
     return {
-      grp,
-      top: team ? team.name : null,
-      pts: topRow.pts,
-      played: true,
-      complete,
-      ownerName: team ? getOwner(team.name) : null,
+      ...d,
+      locked,
+      tipOptions: f.stage === 'group' ? ['home', 'draw', 'away'] : ['home', 'away'],
+      myPick: myTip ? myTip.pick : null,
+      tippedCount: fixtureTips.length,
+      playerCount: players.length,
+      outcome,
+      allTips,
     };
-  });
-
-  // --- FIFA Awards ---
-  const awardsMap = Object.fromEntries(awardWinners.map((a) => [a.award, a]));
-  const fifaAwards = FIFA_AWARDS.map((def) => {
-    const w = awardsMap[def.key] || null;
-    return { ...def, winner: w, ownerName: w?.team_name ? getOwner(w.team_name) : null };
-  });
-
-  // --- Bonus pts per player (each award leader = +0.25) ---
-  const bonusMap = {};
-  const award = (teamName) => {
-    const o = getOwner(teamName);
-    if (o) bonusMap[o] = (bonusMap[o] || 0) + 0.25;
   };
-  const awardTied = (arr, key) => {
-    if (!arr.length || (arr[0][key] ?? 0) === 0) return;
-    const top = arr[0][key];
-    for (const item of arr) {
-      if ((item[key] ?? 0) === top) award(item.team_name);
-      else break;
+
+  const all = [...data.fixtures].sort(fxSort).map(decorate);
+
+  // Group a flat fixture list into day blocks (one collapsible accordion each).
+  const groupByDate = (list) => {
+    const groups = {};
+    for (const f of list) (groups[f.date_label] ||= []).push(f);
+    return Object.entries(groups).map(([title, items]) => ({
+      title,
+      fixtures: items,
+      date_ts: items[0]?.kickoff ? Date.parse(items[0].kickoff) : null,
+      allPlayed: items.every((f) => f.status === 'finished'),
+    }));
+  };
+
+  // `toTip` — still-tippable matches, soonest day first. `results` — locked or
+  // played matches, most recent day first. Both lay out as day-block accordions.
+  return {
+    toTip: groupByDate(all.filter((f) => !f.locked)),
+    results: groupByDate(all.filter((f) => f.locked)).reverse(),
+  };
+}
+
+const STANDINGS_NAME_MAP = {
+  'Czechia': 'Czech Republic',
+  'Bosnia-Herzegovina': 'Bosnia and Herzegovina',
+  'Bosnia & Herzegovina': 'Bosnia and Herzegovina',
+  'Congo DR': 'DR Congo',
+  'DRC': 'DR Congo',
+  'Türkiye': 'Turkey',
+  'Korea Republic': 'South Korea',
+  "Côte d'Ivoire": 'Ivory Coast',
+  "Cote d'Ivoire": 'Ivory Coast',
+};
+
+export function getQualifiers(data, standings) {
+  if (!standings || !standings.children) return { qualified: [], possible: [] };
+
+  const teamByName = new Map(data.teams.map((t) => [t.name.toLowerCase(), t]));
+  const playerById = Object.fromEntries(data.players.map((p) => [p.id, p]));
+  const ownerByTeamId = Object.fromEntries(data.picks.map((pk) => [pk.team_id, playerById[pk.player_id]?.name || null]));
+
+  const qualified = [];
+  const possible = [];
+
+  for (const group of standings.children) {
+    for (const entry of group.standings?.entries || []) {
+      const espnName = entry.team?.displayName || '';
+      const name = STANDINGS_NAME_MAP[espnName] || espnName;
+      const note = entry.note?.description || '';
+      const team = teamByName.get(name.toLowerCase());
+      const owner = team ? (ownerByTeamId[team.id] || null) : null;
+      if (note === 'Advance to Round of 32') qualified.push({ name, group: group.name, owner });
+      else if (note === 'Best 8 advance') possible.push({ name, group: group.name, owner });
     }
-  };
-  awardTied(goldenBoot,   'goals');
-  awardTied(topAssists,   'assists');
-  awardTied(mostRedCards, 'red_cards');
-  awardTied(cleanSheets,  'clean_sheets');
-  awardTied(fairPlay,     'yellow_cards');
-  for (const g of groups) { if (g.top) award(g.top); }
-  for (const fa of fifaAwards) { if (fa.winner?.team_name) award(fa.winner.team_name); }
+  }
 
-  const bonusByPlayer = players
-    .map((p) => ({ name: p.name, pts: bonusMap[p.name] || 0 }))
-    .sort((a, b) => b.pts - a.pts || a.name.localeCompare(b.name));
-
-  return { goldenBoot, topAssists, mostRedCards, fairPlay, cleanSheets, groups, fifaAwards, bonusByPlayer };
+  return { qualified, possible };
 }
