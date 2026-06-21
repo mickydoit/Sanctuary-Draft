@@ -7,7 +7,6 @@ const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&':
 // ---------------------------------------------------------------- Ladder
 export function renderLadder(ladder, groups = []) {
   const initials = (name) => name ? name.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase() : '?';
-  const fmt = (n) => Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/\.?0+$/, '');
   const movHtml = (m, cur) => {
     // Shows the previous rank (where the player came from), not places moved.
     // m = prevRank - currentRank, so prevRank = cur + m.
@@ -21,7 +20,7 @@ export function renderLadder(ladder, groups = []) {
     <h2 class="wcs-title">World Cup Standings</h2>
     <div class="wcs-groups">
       ${groups.map(g => `
-        <div class="wcs-group" data-action="open-group" data-grp="${JSON.stringify({grp:g.grp,teams:g.teams}).replace(/&/g,'&amp;').replace(/"/g,'&quot;')}">
+        <div class="wcs-group">
           <span class="wcs-chip">Group ${esc(g.grp)}</span>
           <div class="wcs-table">
             <div class="wcs-row wcs-head">
@@ -67,10 +66,10 @@ export function renderLadder(ladder, groups = []) {
         <span class="ladder-avatar">${initials(p.name)}</span>
         <span class="ladder-name">${esc(p.name)}</span>
         <span class="ladder-teams">${p.teamCount}</span>
-        <span class="ladder-pts">${fmt(p.points)}</span>
+        <span class="ladder-pts">${p.points}</span>
       </a>`).join('')}
   </div>
-  <p class="hint" style="margin-top:1rem">"Teams left" counts only your drafted nations still in the tournament. Points: group win = 1, draw = 0.5. Knockouts: R32 = 1, R16 = 2, QF = 3, SF = 4, Final = 5. Bonus pts (+0.25 each) for leading golden boot, assists, cards, clean sheets &amp; group tops — see <a href="#/stats">Stats</a>.</p>
+  <p class="hint" style="margin-top:1rem">"Teams left" counts only your drafted nations still in the tournament. Points: group win = 1, draw = 0.5. Knockouts: R32 = 1, R16 = 2, QF = 3, SF = 4, Final = 5. Own both teams in a match? Any decisive result scores the full win, a draw scores 0.5.</p>
   <div class="view-btn-wrap"><a class="view-btn" href="#/fixtures">View Fixtures</a></div>
   ${wcBlock}`;
 }
@@ -196,7 +195,25 @@ function mbRow(feed1, feed2, advance) {
   </div>`;
 }
 
-export function renderBracket(b) {
+export function renderBracket(b, qualifiers) {
+  const { qualified = [], possible = [] } = qualifiers || {};
+  const qualHtml = qualified.length > 0 ? `
+  <section class="qualifiers-section">
+    <h2 class="qualifiers-heading">Confirmed — Round of 32 <span class="qualifiers-count">${qualified.length}/32</span></h2>
+    <div class="qualifiers-grid">
+      ${qualified.map((q) => `
+      <div class="qualifier-card">
+        <span class="q-team">${esc(q.name)}</span>
+        <span class="q-meta">${esc(q.group)}${q.owner ? ` · <strong>${esc(q.owner)}</strong>` : ''}</span>
+      </div>`).join('')}
+      ${possible.length > 0 ? `
+      <div class="qualifier-card qualifier-card--maybe">
+        <span class="q-team">+${possible.length} third-place spots TBD</span>
+        <span class="q-meta">Best 8 of 12 third-placers advance</span>
+      </div>` : ''}
+    </div>
+  </section>` : '';
+
   const [r32, r16, qf, sf, fin] = b.rounds.map(r => r.matches);
   const half = a => [a.slice(0, a.length / 2), a.slice(a.length / 2)];
   const [r32L, r32R] = half(r32);
@@ -228,6 +245,7 @@ export function renderBracket(b) {
       ? `<p class="hint">Advancing team highlighted. Points: R32=1, R16=2, QF=3, SF=4, Final=5.</p>`
       : `<p class="hint">Bracket fills in after the group stage.</p>`}
   </div>
+  ${qualHtml}
   <div class="bkt-page">
     <div class="bkt-header">
       <div class="bkt-hcol">R32</div>
@@ -269,6 +287,121 @@ export function renderBracket(b) {
     <div class="bm-panel" id="bmp-r16">${r16html}</div>
     <div class="bm-panel" id="bmp-ko">${kohtml}</div>
   </div>`;
+}
+
+// --------------------------------------------------------------- Tipping
+export function renderTips(ladder, view, myId) {
+  const initials = (name) => name ? name.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase() : '?';
+  const me = ladder.find((p) => p.id === myId) || null;
+  const optLabel = (f, opt) => opt === 'draw' ? 'Draw'
+    : opt === 'home' ? (f.home_code || f.home_name || 'Home')
+    : (f.away_code || f.away_name || 'Away');
+
+  const tipLadder = `
+    <div class="tip-ladder">
+      <div class="ladder-header">
+        <span class="lh-rank">#</span>
+        <span class="lh-avatar"></span>
+        <span class="lh-name">Player</span>
+        <span class="lh-pts">Pts</span>
+      </div>
+      <div class="ladder-list">
+        ${ladder.map((p, i) => `
+          <div class="ladder-row ${i === 0 ? 'leader' : ''}">
+            <span class="ladder-rank">${i + 1}</span>
+            <span class="ladder-avatar">${initials(p.name)}</span>
+            <span class="ladder-name">${esc(p.name)}</span>
+            <span class="ladder-pts">${p.points}</span>
+          </div>`).join('')}
+      </div>
+    </div>`;
+
+  // A match you can still tip on.
+  const tipCard = (f) => `
+    <div class="tip-match">
+      <div class="tip-match-head">
+        <span class="tip-when">${esc(f.time_label || 'TBC')}</span>
+        <span class="tip-stage">${esc(f.stage_label)}</span>
+      </div>
+      <div class="tip-row">
+        <span class="tip-side">${esc(f.home_name || 'TBD')}</span>
+        <span class="tip-vs">v</span>
+        <span class="tip-side">${esc(f.away_name || 'TBD')}</span>
+      </div>
+      <div class="tip-options">
+        ${f.tipOptions.map((opt) => `
+          <button class="tipbtn ${f.myPick === opt ? 'chosen' : ''}" data-action="tip" data-fixture-id="${f.id}" data-pick="${opt}">
+            ${esc(optLabel(f, opt))}
+          </button>`).join('')}
+      </div>
+      <div class="tip-count">${f.myPick ? 'Your tip is in' : 'Tap your tip'} · ${f.tippedCount}/${f.playerCount} in</div>
+    </div>`;
+
+  // A locked match — reveal everyone's picks.
+  const resultCard = (f) => {
+    const chipClass = (t) => t.pick == null ? 'none' : (f.outcome == null ? 'pending' : (t.correct ? 'hit' : 'miss'));
+    const chipSym = (t) => t.pick == null ? '' : (f.outcome == null ? '' : (t.correct ? '✓' : '✗'));
+    return `
+    <div class="tip-match locked ${f.status === 'finished' ? 'played' : ''}">
+      <div class="tip-match-head">
+        <span class="tip-when">${esc(f.time_label || '')}</span>
+        <span class="tip-stage">${esc(f.stage_label)}</span>
+      </div>
+      <div class="tip-row">
+        <span class="tip-side ${f.outcome === 'home' ? 'won' : ''}">${esc(f.home_name || 'TBD')}</span>
+        <span class="tip-vs">${f.status === 'finished' && f.home_score != null ? `${f.home_score}&ndash;${f.away_score}` : 'v'}</span>
+        <span class="tip-side ${f.outcome === 'away' ? 'won' : ''}">${esc(f.away_name || 'TBD')}</span>
+      </div>
+      <div class="tip-results">
+        ${f.allTips.map((t) => `
+          <span class="tip-chip ${chipClass(t)}">
+            <span class="tip-chip-name">${esc(t.name)}</span>
+            <span class="tip-chip-pick">${t.pick == null ? '—' : esc(optLabel(f, t.pick))} ${chipSym(t)}</span>
+          </span>`).join('')}
+      </div>
+    </div>`;
+  };
+
+  // Each match shows its tip buttons while open, or everyone's picks once locked.
+  const card = (f) => (f.locked ? resultCard(f) : tipCard(f));
+
+  const dayBadge = (g) => {
+    const total = g.fixtures.length;
+    if (g.allPlayed) return `<span class="fxday-badge done">All played</span>`;
+    const toTip = g.fixtures.filter((f) => !f.locked && !f.myPick).length;
+    if (toTip > 0) return `<span class="fxday-badge live">${toTip} to tip</span>`;
+    const played = g.fixtures.filter((f) => f.status === 'finished').length;
+    if (played > 0) return `<span class="fxday-badge">${played}/${total} played</span>`;
+    return `<span class="fxday-badge">${total} match${total !== 1 ? 'es' : ''}</span>`;
+  };
+
+  // openTitle = the one day that starts expanded in its section.
+  const renderDay = (g, openTitle) => `
+    <details class="fxday${g.allPlayed ? ' done' : ''}" data-group="${esc(g.title)}"${g.title === openTitle ? ' open' : ''}>
+      <summary class="fxday-header">
+        <span class="fxday-title">${esc(g.title)}</span>
+        ${dayBadge(g)}
+      </summary>
+      <div class="fxday-body">${g.fixtures.map(card).join('')}</div>
+    </details>`;
+
+  const section = (days, openTitle) => days.map((g) => renderDay(g, openTitle)).join('');
+  const toTipOpen = view.toTip[0] ? view.toTip[0].title : null;       // soonest day to tip
+  const resultsOpen = view.results[0] ? view.results[0].title : null; // most recent results day
+
+  return `
+  <h1>Tipping</h1>
+  <p class="hint">Tip the winner of every match — 1 point for each correct call. Group games can be a draw; knockout ties go to whoever advances. Tips lock 1 hour before kick-off, and you can't see the others' picks until then.</p>
+
+  ${tipLadder}
+
+  <h2 class="tip-section">To tip</h2>
+  ${!me ? `<p class="hint">Tap <strong>Sign in</strong> (top-right) to choose your name and start tipping.</p>` : ''}
+  ${view.toTip.length ? section(view.toTip, toTipOpen) : `<p class="hint">You're all caught up — no matches left to tip.</p>`}
+
+  ${view.results.length ? `<h2 class="tip-section">Results</h2>${section(view.results, resultsOpen)}` : ''}
+
+  <div class="view-btn-wrap"><a class="view-btn" href="#/">World Cup Draft →</a></div>`;
 }
 
 // ----------------------------------------------------------------- Draft
@@ -326,7 +459,7 @@ export function renderDraft(s, isAdmin, myId) {
     <div class="whoami card">
       ${me
         ? `<span class="who-label">You are</span> <span class="me">${esc(me.name)}</span> <button class="link" data-action="clear-me">change</button>`
-        : `<span class="who-label">Who are you?</span> <span class="who-btns">${s.players.map((p) => `<button data-action="set-me" data-player-id="${p.id}">${esc(p.name)}</button>`).join('')}</span>`}
+        : `<span class="who-label">Who are you?</span> <span class="who-btns">${s.players.map((p) => `<button data-action="set-me" data-player-id="${p.id}" data-player-name="${esc(p.name)}">${esc(p.name)}</button>`).join('')}</span>`}
     </div>` : '';
 
   const teamButtons = `
@@ -449,9 +582,8 @@ export function renderTeamView(tv, fromPlayerRoute) {
 }
 
 // ----------------------------------------------------------------- Admin
-export function renderAdmin({ groups, players, teams, settings, mode, notice, problem, awardWinners = [] }) {
+export function renderAdmin({ groups, players, teams, settings, mode, notice, problem }) {
   const teamOptions = (sel) => teams.map((t) => `<option value="${t.id}" ${sel === t.id ? 'selected' : ''}>${esc(t.name)}</option>`).join('');
-  const teamNameOptions = teams.map((t) => `<option value="${esc(t.name)}">${esc(t.name)}</option>`).join('');
 
   const scoreRows = groups.map((g) => `
     <h3>${esc(g.title)}</h3>
@@ -529,180 +661,24 @@ export function renderAdmin({ groups, players, teams, settings, mode, notice, pr
   </section>
 
   <section class="card">
-    <h2>FIFA Awards</h2>
-    <p class="hint">Enter once FIFA announces each award at tournament end. Points go to the owner of that player's team.</p>
-    <form data-action="set-fifa-award" class="form">
-      <label>Award
-        <select name="award">
-          <option value="golden_glove">Golden Glove</option>
-          <option value="best_young_player">Best Young Player</option>
-          <option value="goal_of_tournament">Goal of the Tournament</option>
-        </select>
-      </label>
-      <label>Player name<input name="playerName" placeholder="e.g. M. Neuer" /></label>
-      <label>Team<select name="teamName"><option value="">Select team…</option>${teamNameOptions}</select></label>
-      <label>Notes (optional)<input name="notes" placeholder="e.g. Best GK of tournament" /></label>
-      <button type="submit">Save award</button>
-    </form>
-    ${awardWinners.length ? `
-    <h3 style="margin-top:1.2rem;font-size:.9rem">Saved awards</h3>
-    <ul style="list-style:none;padding:0;margin:.5rem 0 0">
-      ${awardWinners.map((a) => `<li style="font-size:.85rem;margin:.3rem 0">${esc(a.award)}: <strong>${esc(a.player_name || '?')}</strong> · ${esc(a.team_name || '?')}</li>`).join('')}
-    </ul>` : ''}
-  </section>
-
-  <section class="card">
     <h2>Enter scores</h2>
     <p class="hint">For knockout matches, also pick the team that advances (this is who gets the points, including penalty wins).</p>
     ${scoreRows}
   </section>`;
 }
 
-// ----------------------------------------------------------------- Stats
-export function renderStats(s) {
-  const { goldenBoot, topAssists, mostRedCards, fairPlay, cleanSheets, groups, fifaAwards, bonusByPlayer } = s;
-
-  const hasLiveData = goldenBoot.length || topAssists.length || cleanSheets.length || mostRedCards.length || fairPlay.length;
-
-  // ── Bonus pills ──
-  const pillsHtml = bonusByPlayer.length
-    ? bonusByPlayer.map((p, i) => {
-        const cls = p.pts === 0 ? 'zero' : i === 0 ? 'leader' : 'other';
-        return `<div class="stat-pill ${cls}">
-        <span class="stat-pill-val">+${p.pts}</span>
-        <span class="stat-pill-label">${esc(p.name)}</span>
-      </div>`;
-      }).join('')
-    : `<p class="hint" style="margin:0">Bonus points will appear here as matches are played.</p>`;
-
-  // ── Award overview cards ──
-  const overviewCards = [
-    { label: 'Golden Boot',    accent: '#8bffec', stat: goldenBoot[0]   ? `${goldenBoot[0].goals} Goals`       : null, player: goldenBoot[0]?.player_name,   team: goldenBoot[0]?.team_name,   owner: goldenBoot[0]?.ownerName },
-    { label: 'Top Assists',    accent: '#f4ff7b', stat: topAssists[0]   ? `${topAssists[0].assists} Assists`    : null, player: topAssists[0]?.player_name,   team: topAssists[0]?.team_name,   owner: topAssists[0]?.ownerName },
-    { label: 'Clean Sheets',   accent: '#9FED00', stat: cleanSheets[0]  ? `${cleanSheets[0].clean_sheets} CS`  : null, player: null,                          team: cleanSheets[0]?.team_name,  owner: cleanSheets[0]?.ownerName },
-    { label: 'Most Red Cards', accent: '#ff6b9d', stat: mostRedCards[0] ? `${mostRedCards[0].red_cards} Reds`  : null, player: null,                          team: mostRedCards[0]?.team_name, owner: mostRedCards[0]?.ownerName },
-    { label: 'Fair Play',      accent: '#8bffec', stat: fairPlay[0]     ? `${fairPlay[0].yellow_cards} Cards`  : null, player: null,                          team: fairPlay[0]?.team_name,     owner: fairPlay[0]?.ownerName },
-    { label: 'Top of Group',   accent: '#f4ff7b', stat: 'See below',    player: 'Most group wins',              team: null, owner: '+0.25 pt per group win' },
-  ].map((c) => `
-    <div class="award-card ${!c.stat ? 'pending' : ''}" style="--accent:${c.accent}">
-      <span class="award-card-label">${esc(c.label)}</span>
-      <div class="award-card-row">
-        ${c.player ? `<span class="award-card-player">${esc(c.player)}</span>${c.team ? `<span class="award-card-sep">·</span>` : ''}` : ''}
-        ${c.team ? `<span class="award-card-team">${esc(c.team)}</span>` : ''}
-        ${!c.player && !c.team ? `<span class="award-card-team" style="opacity:.45">TBD</span>` : ''}
-      </div>
-      <span class="award-card-owner">${esc(c.owner || '')}</span>
-      <div class="award-card-footer">
-        <span class="award-card-stat">${esc(c.stat || '—')}</span>
-        <span class="award-card-pts">+0.25 pts</span>
-      </div>
-    </div>`).join('');
-
-  // ── Stat table builder ──
-  const statTable = ({ accent, chip, headCols: [h1, h2, h3], rows }) => `
-    <div class="stat-section" style="--accent:${accent}">
-      <span class="section-chip">${esc(chip)}</span>
-      <div class="stat-table">
-        <div class="stat-row stat-head">
-          <div class="stat-rank">#</div>
-          <div class="stat-team-name">${esc(h1)}</div>
-          <div class="stat-sub">${esc(h2)}</div>
-          <div class="stat-val">${esc(h3)}</div>
-        </div>
-        ${rows.length ? rows.map((r, i) => `
-        <div class="stat-row">
-          <div class="stat-rank">${r.rank ?? i + 1}</div>
-          <div><span class="stat-team-name">${esc(r.name)}</span></div>
-          <div class="stat-sub">${esc(r.sub)}</div>
-          <div class="stat-val">${esc(r.val)}</div>
-        </div>`).join('') : `<div class="stat-row"><div></div><div class="stat-sub" style="grid-column:2/5;opacity:.45">No data yet</div></div>`}
-      </div>
-    </div>`;
-
-  const gbTable = statTable({
-    accent: '#8bffec', chip: 'Golden Boot', headCols: ['Player · Team', 'Owner', 'G'],
-    rows: goldenBoot.map((ps, i) => ({ name: `${ps.player_name} · ${ps.team_name}`, sub: ps.ownerName || '—', val: String(ps.goals), rank: i + 1 })),
-  });
-
-  const aTable = statTable({
-    accent: '#f4ff7b', chip: 'Top Assists', headCols: ['Player · Team', 'Owner', 'A'],
-    rows: topAssists.map((ps, i) => ({ name: `${ps.player_name} · ${ps.team_name}`, sub: ps.ownerName || '—', val: String(ps.assists), rank: i + 1 })),
-  });
-
-  const csTable = statTable({
-    accent: '#9FED00', chip: 'Clean Sheets', headCols: ['Team', 'GA', 'CS'],
-    rows: cleanSheets.map((t, i) => ({ name: t.team_name, sub: `${esc(t.ownerName || '—')} · ${t.goals_against} GA`, val: String(t.clean_sheets), rank: i + 1 })),
-  });
-
-  const rcTable = statTable({
-    accent: '#ff6b9d', chip: 'Most Red Cards', headCols: ['Team', 'YC', 'RC'],
-    rows: mostRedCards.map((t, i) => ({ name: t.team_name, sub: `${esc(t.ownerName || '—')} · ${t.yellow_cards} YC`, val: String(t.red_cards), rank: i + 1 })),
-  });
-
-  const fpTable = statTable({
-    accent: '#8bffec', chip: 'Fair Play — Fewest Cards', headCols: ['Team', 'RC', 'YC'],
-    rows: fairPlay.map((t, i) => ({ name: t.team_name, sub: `${esc(t.ownerName || '—')} · ${t.red_cards} RC`, val: String(t.yellow_cards), rank: i + 1 })),
-  });
-
-  // ── Group chips ──
-  const groupChips = groups.map((g) => {
-    const tbd = !g.played || !g.top;
-    const style = tbd ? '--accent:#f4ff7b;opacity:.4' : '--accent:#f4ff7b';
-    return `
-    <div class="group-chip" style="${style}">
-      <span class="group-chip-label">Group ${esc(g.grp)}</span>
-      <span class="group-chip-team">${esc(g.top || (g.played ? 'In progress' : 'Upcoming'))}</span>
-      <span class="group-chip-owner">${esc(g.ownerName || '—')}</span>
-      <span class="group-chip-pts">${g.complete ? '+0.25' : 'TBD'}</span>
-    </div>`;
-  }).join('');
-
-  // ── FIFA Awards ──
-  const fifaCards = fifaAwards.map((fa) => {
-    const w = fa.winner;
-    return `
-    <div class="fifa-pending-card">
-      <div class="fifa-pending-body">
-        <span class="fifa-pending-name">${esc(fa.label)}</span>
-        ${w ? `
-          <span class="fifa-winner-tag">${esc(w.player_name || '?')} · ${esc(w.team_name || '?')}</span>
-          ${fa.ownerName ? `<span class="fifa-pending-desc" style="margin-top:.35rem">Owner: ${esc(fa.ownerName)}</span>` : ''}
-        ` : `<span class="fifa-pending-desc">${esc(fa.desc)}</span>`}
-      </div>
-      <div class="fifa-pending-right">
-        <span class="fifa-pending-pts">+.25</span>
-        <span class="fifa-pending-pts-lbl">${w ? 'awarded' : 'bonus pts'}</span>
-      </div>
-    </div>`;
-  }).join('');
-
+// -------------------------------------------------- Identity gate (login)
+export function renderIdentityGate(players) {
   return `
-  <h1 class="stats-h1">Stats</h1>
-
-  <div class="stats-summary">${pillsHtml}</div>
-
-  <div class="stats-section-label">Live Stats <span class="stats-section-badge">auto-updated</span></div>
-
-  ${hasLiveData ? '' : '<p class="hint" style="margin-bottom:1.5rem">Stats will appear here as matches are played and synced from ESPN.</p>'}
-
-  <div class="awards-grid">${overviewCards}</div>
-
-  ${gbTable}
-  ${aTable}
-  ${csTable}
-  ${rcTable}
-  ${fpTable}
-
-  <div class="stat-section" style="--accent:#f4ff7b">
-    <span class="section-chip">Top of Group</span>
-    <div class="group-grid">${groupChips}</div>
-  </div>
-
-  <div class="stats-section-label">FIFA Awards <span class="stats-section-badge">announced at end</span></div>
-  <p class="hint" style="margin-bottom:1rem">Decided by FIFA at tournament end. Points go to the owner of the winning player's team.</p>
-  <div class="fifa-award-list" style="--accent:#f4ff7b">${fifaCards}</div>
-
-  <div class="view-btn-wrap"><a class="view-btn" href="#/">View Ladder</a></div>`;
+  <div class="idgate">
+    <img class="idgate-logo" src="assets/img/logo.svg" alt="LBH Club World Cup" />
+    <h1 class="idgate-title">Who are you?</h1>
+    <p class="hint idgate-hint">Tap your name to log in — we'll remember you on this device.</p>
+    <div class="idgate-btns">
+      ${players.map((p) => `<button class="idgate-btn" data-action="set-me" data-player-id="${p.id}" data-player-name="${esc(p.name)}">${esc(p.name)}</button>`).join('')}
+    </div>
+    <button class="link idgate-skip" data-action="skip-id">I'll pick later — just looking</button>
+  </div>`;
 }
 
 // ----------------------------------------------------------------- Login
