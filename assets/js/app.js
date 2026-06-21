@@ -1,9 +1,9 @@
 // SPA router + event wiring. Hash-based routing so it works under any GitHub
 // Pages base path with no server rewrites.
 
-import { store } from './store.js?v=8';
-import { getLadder, getFixturesView, getBracket, getDraftState, getTeamsView, getPlayerView, getTeamView, getStats, getGroupStandings } from './compute.js?v=38';
-import { renderLadder, renderFixtures, renderBracket, renderDraft, renderAdmin, renderLogin, renderTeamsOverview, renderPlayerView, renderTeamView, renderStats } from './views.js?v=40';
+import { store } from './store.js?v=17';
+import { getLadder, getFixturesView, getBracket, getDraftState, getTeamsView, getPlayerView, getTeamView, getTipLadder, getTipsView, getGroupStandings, getQualifiers } from './compute.js?v=23';
+import { renderLadder, renderFixtures, renderBracket, renderDraft, renderAdmin, renderLogin, renderTeamsOverview, renderPlayerView, renderTeamView, renderTips, renderIdentityGate } from './views.js?v=49';
 
 const root = document.getElementById('root');
 const PASSWORD = (window.LBH_CONFIG || {}).ADMIN_PASSWORD || 'admin';
@@ -11,6 +11,11 @@ const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&':
 
 let isAdmin = localStorage.getItem('lbh_admin') === '1';
 let myId = Number(localStorage.getItem('lbh_me')) || null; // which player THIS device is
+let myName = localStorage.getItem('lbh_me_name') || null;  // cached for the header chip
+let skipId = sessionStorage.getItem('lbh_skip_id') === '1'; // "I'll pick later" — this visit only
+
+// Two-letter badge for the identity chip ("Papacostas" -> "PA").
+const initials = (n) => !n ? '?' : (n.includes(' ') ? n.split(' ').map((w) => w[0]).join('').slice(0, 2) : n.slice(0, 2)).toUpperCase();
 
 function applyTheme(dark) {
   document.body.dataset.theme = dark ? 'dark' : 'light';
@@ -21,17 +26,18 @@ let draftMyTurn = false;   // set each draft render; pauses auto-refresh while y
 let flash = null;          // {notice} | {problem} consumed by the next admin render
 let loginError = null;
 let refreshTimer = null;
+let prevRoute = null;
+let espnStandings = null;
+let lastRenderedRoute = null;
 let lastPaintedRoute = null;
 let lastRenderedBody = null;
-let lastRenderedRoute = null;
-let prevRoute = null;
 
 const NAV = [
   { route: '/', label: 'Ladder', key: 'ladder' },
   { route: '/fixtures', label: 'Fixtures', key: 'fixtures' },
   { route: '/bracket', label: 'Bracket', key: 'bracket' },
   { route: '/draft', label: 'Teams', key: 'draft' },
-  { route: '/stats', label: 'Stats', key: 'stats' },
+  { route: '/tips', label: 'Tipping', key: 'tips' },
 ];
 
 function currentRoute() {
@@ -42,7 +48,7 @@ function activeKey(route) {
   if (route.startsWith('/fixtures')) return 'fixtures';
   if (route.startsWith('/bracket')) return 'bracket';
   if (route.startsWith('/draft')) return 'draft';
-  if (route.startsWith('/stats')) return 'stats';
+  if (route.startsWith('/tips')) return 'tips';
   if (route.startsWith('/admin') || route.startsWith('/login')) return 'admin';
   return '';
 }
@@ -54,6 +60,9 @@ function headerHtml(route) {
     ? `<a href="#/admin" class="${ak === 'admin' ? 'active' : ''}">Admin</a><button class="link" data-action="logout">Logout</button>`
     : `<a href="#/login" class="${ak === 'admin' ? 'active' : ''}">Admin</a>`;
   const isDark = document.body.dataset.theme !== 'light';
+  const idChip = myId
+    ? `<button class="id-chip" data-action="clear-me" title="You are ${esc(myName || '')} — tap to switch player">${initials(myName)}</button>`
+    : `<button class="id-chip ghost" data-action="signin" title="Pick your name">Sign in</button>`;
   return `
   <header class="topbar">
     <a class="brand" href="#/">
@@ -61,6 +70,7 @@ function headerHtml(route) {
     </a>
     <nav class="topbar-nav">${links}${adminArea}</nav>
     <div class="topbar-end">
+      ${idChip}
       <button class="theme-toggle" data-action="toggle-theme">${isDark ? '☀ Light' : '☾ Dark'}</button>
       <button class="nav-burger" data-action="toggle-nav" aria-label="Menu">
         <span></span><span></span><span></span>
@@ -81,8 +91,8 @@ function headerHtml(route) {
     <a href="#/bracket" class="bnav-item ${ak === 'bracket' ? 'active' : ''}" aria-label="Bracket">
       <span class="bnav-icon bnav-bracket"></span>
     </a>
-    <a href="#/stats" class="bnav-item ${ak === 'stats' ? 'active' : ''}" aria-label="Stats">
-      <span class="bnav-icon bnav-stats"></span>
+    <a href="#/tips" class="bnav-item ${ak === 'tips' ? 'active' : ''}" aria-label="Tipping">
+      <span class="bnav-icon bnav-tips"></span>
     </a>
     <a href="${isAdmin ? '#/admin' : '#/login'}" class="bnav-item ${ak === 'admin' ? 'active' : ''}" aria-label="Admin">
       <span class="bnav-icon bnav-admin"></span>
@@ -109,7 +119,6 @@ function paint(route, body) {
     root.innerHTML = headerHtml(route) + `<main class="container" id="app">${body}</main>`;
     lastPaintedRoute = route;
     lastRenderedBody = body;
-    window.scrollTo(0, 0);
   }
   // Restore open state on auto-refresh (skip on first load — let the smart default apply)
   if (hadAccordions && openGroups.size > 0) {
@@ -121,7 +130,10 @@ function paint(route, body) {
 
 async function render(opts = {}) {
   const route = currentRoute();
-  if (lastRenderedRoute !== route) prevRoute = lastRenderedRoute;
+  if (lastRenderedRoute !== route) {
+    prevRoute = lastRenderedRoute;
+    window.scrollTo(0, 0);
+  }
   lastRenderedRoute = route;
   if (!root.querySelector('.topbar')) paint(route, `<p class="hint">Loading…</p>`);
 
@@ -144,6 +156,20 @@ async function render(opts = {}) {
     return;
   }
 
+  // Backfill the cached name for devices that picked a player before names were stored.
+  if (myId && !myName) {
+    const p = data.players.find((x) => x.id === myId);
+    if (p) { myName = p.name; localStorage.setItem('lbh_me_name', myName); }
+  }
+
+  // First-open login: greet with "Who are you?" until you pick a name (remembered
+  // on this device) or choose to look around first.
+  if (!myId && !skipId) {
+    if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
+    root.innerHTML = `<main class="container idgate-wrap">${renderIdentityGate([...data.players].sort((a, b) => a.id - b.id))}</main>`;
+    return;
+  }
+
   let body;
   if (route.startsWith('/draft/player/')) {
     const playerId = Number(route.split('/')[3]);
@@ -158,7 +184,16 @@ async function render(opts = {}) {
         body = renderFixtures(getFixturesView(data));
         break;
       case '/bracket':
-        body = renderBracket(getBracket(data));
+        body = renderBracket(getBracket(data), getQualifiers(data, espnStandings));
+        if (!espnStandings) {
+          fetch('https://site.api.espn.com/apis/v2/sports/soccer/fifa.world/standings?season=2026')
+            .then((r) => r.ok ? r.json() : null)
+            .catch(() => null)
+            .then((s) => { if (s) { espnStandings = s; if (currentRoute() === '/bracket') render('/bracket'); } });
+        }
+        break;
+      case '/tips':
+        body = renderTips(getTipLadder(data), getTipsView(data, myId), myId);
         break;
       case '/draft': {
         const ds = getDraftState(data);
@@ -170,17 +205,9 @@ async function render(opts = {}) {
         }
         break;
       }
-      case '/stats': {
-        let statsData = { playerStats: [], awardWinners: [] };
-        try { statsData = await store.loadStats(); } catch { /* show empty state */ }
-        body = renderStats(getStats(data, statsData));
-        break;
-      }
       case '/admin':
         if (!isAdmin) { body = renderLogin(loginError); loginError = null; }
         else {
-          let adminStats = { playerStats: [], awardWinners: [] };
-          try { adminStats = await store.loadStats(); } catch { /* ignore */ }
           body = renderAdmin({
             groups: getFixturesView(data),
             players: [...data.players].sort((a, b) => a.id - b.id),
@@ -189,19 +216,13 @@ async function render(opts = {}) {
             mode: store.mode,
             notice: flash && flash.notice,
             problem: flash && flash.problem,
-            awardWinners: adminStats.awardWinners,
           });
           flash = null;
         }
         break;
       case '/':
-      default: {
-        let ladderStats = { playerStats: [], awardWinners: [] };
-        try { ladderStats = await store.loadStats(); } catch { /* show ladder without bonus */ }
-        const ladderStatsResult = getStats(data, ladderStats);
-        body = renderLadder(getLadder(data, ladderStatsResult.bonusByPlayer), getGroupStandings(data));
-        break;
-      }
+      default:
+        body = renderLadder(getLadder(data), getGroupStandings(data));
     }
   }
   paint(route, body);
@@ -250,7 +271,7 @@ function scrollToCurrentMatch(route) {
 // Ladder + fixtures refresh themselves so entered scores appear without a reload.
 function setAutoRefresh(route) {
   if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
-  if (route === '/' || route === '/fixtures' || route === '/stats') {
+  if (route === '/' || route === '/fixtures' || route === '/tips') {
     refreshTimer = setInterval(() => { if (currentRoute() === route) render(); }, route === '/fixtures' ? 30000 : 60000);
   } else if (route === '/draft') {
     // Waiting players poll so picks appear live; the person mid-pick isn't yanked.
@@ -268,57 +289,6 @@ async function run(fn) {
     else { window.alert(err.message); await render(); }
   }
 }
-
-// ---- Group standings modal ----
-const grpModal = document.createElement('div');
-grpModal.className = 'grp-modal';
-grpModal.innerHTML = `
-  <div class="grp-modal-backdrop"></div>
-  <div class="grp-modal-panel" role="dialog" aria-modal="true">
-    <div class="grp-modal-hdr">
-      <span class="grp-modal-title"></span>
-      <button class="grp-modal-close" aria-label="Close">&#x2715;</button>
-    </div>
-    <div class="grp-modal-body"></div>
-  </div>`;
-document.body.appendChild(grpModal);
-
-function openGroupModal(g) {
-  const rows = g.teams.map((t, i) => `
-    <div class="grp-modal-row${i < 2 && t.Pts > 0 ? ' grp-modal-qualify' : ''}">
-      <span class="gm-pos">${i + 1}</span>
-      <span class="gm-team">${esc(t.name)}</span>
-      <span class="gm-num">${t.P}</span>
-      <span class="gm-num">${t.W}</span>
-      <span class="gm-num">${t.D}</span>
-      <span class="gm-num">${t.L}</span>
-      <span class="gm-num gm-gd">${t.GD > 0 ? '+' : ''}${t.GD}</span>
-      <span class="gm-num gm-pts">${t.Pts}</span>
-    </div>`).join('');
-  grpModal.querySelector('.grp-modal-title').textContent = `Group ${g.grp}`;
-  grpModal.querySelector('.grp-modal-body').innerHTML = `
-    <div class="grp-modal-row grp-modal-head">
-      <span class="gm-pos">#</span>
-      <span class="gm-team">Team</span>
-      <span class="gm-num">P</span>
-      <span class="gm-num">W</span>
-      <span class="gm-num">D</span>
-      <span class="gm-num">L</span>
-      <span class="gm-num">GD</span>
-      <span class="gm-num gm-pts">Pts</span>
-    </div>${rows}`;
-  grpModal.classList.add('open');
-  document.body.style.overflow = 'hidden';
-}
-
-function closeGroupModal() {
-  grpModal.classList.remove('open');
-  document.body.style.overflow = '';
-}
-
-grpModal.querySelector('.grp-modal-backdrop').addEventListener('click', closeGroupModal);
-grpModal.querySelector('.grp-modal-close').addEventListener('click', closeGroupModal);
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeGroupModal(); });
 
 // ---- event delegation (listeners live on the persistent #root) ----
 root.addEventListener('submit', (e) => {
@@ -367,14 +337,6 @@ root.addEventListener('submit', (e) => {
   } else if (action === 'settings') {
     const on = fd.get('scoreThirdPlace') != null;
     run(async () => { await store.setThirdPlace(on); flash = { notice: 'Settings saved.' }; });
-  } else if (action === 'set-fifa-award') {
-    const award = fd.get('award');
-    const playerName = String(fd.get('playerName') || '').trim();
-    const teamName = String(fd.get('teamName') || '').trim();
-    const notes = String(fd.get('notes') || '').trim();
-    if (!award) { window.alert('Select an award.'); return; }
-    if (!teamName) { window.alert('Select a team.'); return; }
-    run(async () => { await store.setAwardWinner(award, playerName || null, teamName, notes || null); flash = { notice: 'Award saved.' }; });
   } else if (action === 'add-fixture') {
     const stage = fd.get('stage');
     const homeTeamId = Number(fd.get('homeTeamId'));
@@ -402,22 +364,31 @@ root.addEventListener('click', (e) => {
     render();
   } else if (action === 'set-me') {
     myId = Number(el.dataset.playerId);
+    myName = el.dataset.playerName || null;
     localStorage.setItem('lbh_me', String(myId));
+    if (myName) localStorage.setItem('lbh_me_name', myName);
+    skipId = false; sessionStorage.removeItem('lbh_skip_id');
     render();
   } else if (action === 'clear-me') {
-    myId = null;
+    myId = null; myName = null;
     localStorage.removeItem('lbh_me');
+    localStorage.removeItem('lbh_me_name');
+    skipId = false; sessionStorage.removeItem('lbh_skip_id');
+    render();
+  } else if (action === 'skip-id') {
+    skipId = true; sessionStorage.setItem('lbh_skip_id', '1');
+    render();
+  } else if (action === 'signin') {
+    skipId = false; sessionStorage.removeItem('lbh_skip_id');
     render();
   } else if (action === 'draft-pick') {
     run(() => store.makePick(Number(el.dataset.teamId)));
+  } else if (action === 'tip') {
+    if (!myId) { window.alert('Pick your name first.'); return; }
+    run(() => store.saveTip(myId, Number(el.dataset.fixtureId), el.dataset.pick));
   } else if (action === 'del-fixture') {
     if (!window.confirm('Delete this knockout match?')) return;
     run(() => store.deleteFixture(Number(el.dataset.id)));
-  } else if (action === 'scroll-to') {
-    const target = document.getElementById(el.dataset.target);
-    if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  } else if (action === 'open-group') {
-    try { openGroupModal(JSON.parse(el.dataset.grp)); } catch { /* ignore bad data */ }
   }
 });
 
@@ -433,10 +404,10 @@ const MIN_SPLASH = 4000;
 const hideSplash = () => {
   if (!splashEl || splashEl.classList.contains('splash-out')) return;
   splashEl.classList.add('splash-out');
-  setTimeout(() => splashEl.remove(), 520);
+  setTimeout(() => splashEl.remove(), 700);
 };
-const splashGuard = setTimeout(hideSplash, 6000); // failsafe
+// Hard cap fires just after the bar animation ends — no hung fetch can keep the splash up
+setTimeout(hideSplash, MIN_SPLASH + 400);
 render({ scrollToCurrent: true }).finally(() => {
-  clearTimeout(splashGuard);
   setTimeout(hideSplash, Math.max(0, MIN_SPLASH - (Date.now() - splashT0)));
 });
