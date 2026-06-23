@@ -18,11 +18,13 @@
   <meta name="apple-mobile-web-app-title" content="LBH Draft" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link rel="stylesheet" href="assets/css/styles.css?v=82" />
+  <link rel="preload" href="assets/img/loading-bg-messi.png" as="image" />
+  <link rel="preload" href="assets/img/messi.svg" as="image" />
+  <link rel="stylesheet" href="assets/css/styles.css?v=87" />
   <!-- Cache-bust: redirect to a versioned URL so stale cached pages reload once -->
   <script>
     (function () {
-      var V = '64';
+      var V = '68';
       try {
         if (localStorage.getItem('_lbhv') !== V) {
           localStorage.setItem('_lbhv', V);
@@ -37,17 +39,34 @@
 </head>
 <body data-route="ladder" data-theme="dark">
   <div id="splash">
-    <img class="splash-bg" src="assets/img/loading-bg-messi.png" alt="" />
-    <div class="splash-logo-wrap">
+    <div class="splash-header">
       <img src="assets/img/logo-splash.svg" class="splash-logo-img" alt="LBH Draft 2026" />
     </div>
     <div class="splash-bar-track">
       <div class="splash-bar"></div>
     </div>
-    <img class="splash-bg-img" src="assets/img/messi.svg" alt="" />
+    <div class="splash-behind-wrap"><img class="splash-behind" src="assets/img/splash-behind.svg" alt="" /></div>
+    <div class="splash-player-wrap"><img class="splash-player-img" src="assets/img/messi.svg" alt="" /></div>
   </div>
   <div id="root"><main class="container"><p class="hint">Loading…</p></main></div>
-  <script type="module" src="assets/js/app.js?v=52"></script>
+  <script type="module" src="assets/js/app.js?v=56"></script>
   <script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');</script>
+  <script>
+    (function () {
+      var p = document.querySelector('.splash-player-img');
+      var b = document.querySelector('.splash-behind');
+      if (!p) return;
+      var done = false;
+      function reveal() {
+        if (done) return; done = true;
+        if (b) b.classList.add('splash-reveal');
+        setTimeout(function () { p.classList.add('splash-reveal'); }, 140);
+      }
+      setTimeout(reveal, 3500);
+      if (p.complete && p.naturalWidth) { reveal(); }
+      else if (p.decode) { p.decode().catch(function () {}).then(reveal); }
+      else { p.addEventListener('load', reveal); p.addEventListener('error', reveal); }
+    })();
+  </script>
 </body>
 </html>

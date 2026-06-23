@@ -134,65 +134,98 @@ a:hover { text-decoration: underline; }
   position: fixed; inset: 0; z-index: 9999;
   background: #328fff;
   overflow: hidden;
+  transition: opacity 0.6s ease;
 }
-#splash.splash-out { opacity: 0; pointer-events: none; transition: opacity .5s ease; }
-.splash-bg {
+#splash.splash-out { opacity: 0; pointer-events: none; }
+#splash::after {
+  content: '';
   position: absolute;
-  inset: 0; width: 100%; height: 100%;
-  object-fit: cover;
+  inset: 0;
   z-index: 0;
+  background: transparent;
   pointer-events: none;
 }
-.splash-bg-img {
+#splash::before {
+  content: '';
   position: absolute;
-  left: 50%;
-  bottom: -2dvh;
-  transform: translateX(-50%);
-  height: clamp(440px, 62dvh, 640px);
-  width: auto;
-  z-index: 1;
-  pointer-events: none;
+  inset: 0;
+  z-index: 0;
+  background: url('../img/loading-bg-messi.png') center/cover no-repeat;
   opacity: 0;
-  animation: splash-img-in 0.7s ease-out 0.15s forwards;
+  animation: splash-img-in 0.5s ease-out forwards;
+  pointer-events: none;
+}
+.splash-header {
+  position: absolute;
+  top: 13%;
+  left: 50%; transform: translateX(-50%);
+  z-index: 3;
+  opacity: 0;
+  animation: splash-img-in 0.4s ease-out 0.15s forwards;
+}
+.splash-logo-img {
+  height: 150px; width: auto;
+}
+.splash-bar-track {
+  position: absolute; top: 24%;
+  left: 50%; transform: translateX(-50%);
+  width: 176px; height: 8px;
+  border-radius: 999px; overflow: hidden;
+  z-index: 3;
+  opacity: 0;
+  animation: splash-img-in 0.4s ease-out 0.2s forwards;
+}
+.splash-bar {
+  height: 100%; border-radius: 999px;
+  background: linear-gradient(90deg, #111A7B, #FFFFFF);
+  transform: scaleX(0); transform-origin: left;
+  animation: splash-load 4s cubic-bezier(.4,0,.2,1) forwards;
+}
+@keyframes splash-load { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+.splash-behind-wrap,
+.splash-player-wrap {
+  position: absolute;
+  bottom: 0;
+  left: 0; right: 0;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+.splash-behind-wrap { z-index: 1; }
+.splash-player-wrap { z-index: 2; }
+.splash-behind {
+  width: 80vw;
+  height: auto;
+  opacity: 0;
+  transform: translateY(18px);
+  transition: opacity 0.6s ease-out, transform 0.6s ease-out;
+}
+.splash-behind.splash-reveal {
+  opacity: 1;
+  transform: translateY(0);
+}
+.splash-player-img {
+  height: 63dvh;
+  width: auto;
+  opacity: 0;
+  transform: translateY(24px);
+  transition: opacity 0.85s ease-out, transform 0.85s cubic-bezier(0.2, 0, 0, 1);
+}
+.splash-player-img.splash-reveal {
+  opacity: 1;
+  transform: translateY(0);
 }
 @keyframes splash-img-in {
   from { opacity: 0; }
   to   { opacity: 1; }
 }
 @media (max-height: 700px) {
-  .splash-bg-img { height: clamp(380px, 54dvh, 520px); bottom: -1dvh; }
+  .splash-player-img { height: 55dvh; }
+  .splash-behind { width: 70vw; }
 }
 @media (min-width: 768px) {
-  .splash-bg-img {
-    bottom: auto;
-    top: 32%;
-    height: 68dvh;
-    transform: translateX(-50%);
-  }
+  .splash-behind { height: 44dvh; width: auto; }
 }
-.splash-logo-wrap {
-  position: absolute;
-  left: 50%; top: 20%;
-  transform: translate(-50%, -50%);
-  z-index: 2;
-}
-.splash-logo-img {
-  height: 80px; width: auto;
-}
-.splash-bar-track {
-  position: absolute; top: 31%;
-  left: 50%; transform: translateX(-50%);
-  width: 40%; height: 8px;
-  border-radius: 999px; background: rgba(0,0,0,.12); overflow: hidden;
-  z-index: 2;
-}
-.splash-bar {
-  height: 100%; border-radius: 999px;
-  background: linear-gradient(90deg, #111A7B, #ffffff);
-  transform: scaleX(0); transform-origin: left;
-  animation: splash-load 4s cubic-bezier(.4,0,.2,1) forwards;
-}
-@keyframes splash-load { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 
 /* ---- TOPBAR ---- */
 .topbar {
@@ -1657,3 +1690,33 @@ body[data-route="stats"] {
   margin-top: .3rem;
 }
 }
+
+/* ---- Confirmed qualifiers grid (bracket page) ---- */
+.qualifiers-section { margin-bottom: 1.75rem; }
+.qualifiers-heading { font-size: .75rem; text-transform: uppercase; letter-spacing: .09em; color: var(--text-2); margin: 0 0 .65rem; font-weight: 700; }
+.qualifiers-count { font-size: .7rem; background: var(--h1-color); color: #fff; border-radius: 4px; padding: .1rem .45rem; margin-left: .4rem; vertical-align: middle; }
+.qualifiers-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: .4rem; }
+.qualifier-card { background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--r-sm); padding: .45rem .6rem; }
+.qualifier-card--maybe { border-style: dashed; opacity: .55; }
+.q-team { display: block; font-weight: 700; font-size: .78rem; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.q-meta { display: block; font-size: .65rem; color: var(--text-2); margin-top: .1rem; }
+.q-meta strong { color: var(--h1-color); font-weight: 700; }
+
+/* Bracket: confirmed R32 team slot (known team, match not yet played) */
+.ko-side.confirmed-q { border-left: 2px solid var(--h1-color); }
+.ko-side.confirmed-q .ko-team { color: var(--h1-color); font-weight: 700; }
+
+/* ---- Click-to-enlarge modal ---- */
+[data-expand-type] { cursor: zoom-in; }
+.lbh-modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.75); z-index: 999; display: flex; align-items: center; justify-content: center; padding: 1rem; backdrop-filter: blur(2px); }
+.lbh-modal-bg[hidden] { display: none; }
+.lbh-modal-box { background: var(--bg); border: 1px solid var(--border); border-radius: var(--r); padding: 1.5rem 1rem 1.25rem; max-width: 520px; width: 100%; max-height: 85dvh; overflow-y: auto; position: relative; }
+.lbh-modal-close { position: absolute; top: .6rem; right: .75rem; background: none; border: none; font-size: 1.1rem; color: var(--text-2); cursor: pointer; line-height: 1; padding: .25rem .4rem; border-radius: 4px; }
+.lbh-modal-close:hover { color: var(--text); background: var(--bg-2); }
+.lbh-modal-content { margin-top: .25rem; }
+.lbh-modal-zoom.lbh-modal-match .ko-match { cursor: default; padding: 1rem; }
+.lbh-modal-zoom.lbh-modal-match .ko-team { font-size: 1.1rem; }
+.lbh-modal-zoom.lbh-modal-match .ko-score { font-size: 1.5rem; }
+.lbh-modal-zoom.lbh-modal-group .wcs-group { cursor: default; width: 100%; }
+.lbh-modal-zoom.lbh-modal-group .wcs-wdl { display: block !important; }
+.lbh-modal-zoom.lbh-modal-group .wcs-row { grid-template-columns: 1.4rem 1fr 1.6rem 1.6rem 1.6rem 1.6rem 2rem 2rem; }
