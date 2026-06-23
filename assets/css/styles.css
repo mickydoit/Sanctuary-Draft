@@ -132,7 +132,7 @@ a:hover { text-decoration: underline; }
 /* ---- SPLASH / LOADING SCREEN ---- */
 #splash {
   position: fixed; inset: 0; z-index: 9999;
-  background: #f4f4f2;
+  background: #328fff;
   overflow: hidden;
 }
 #splash.splash-out { opacity: 0; pointer-events: none; transition: opacity .5s ease; }
@@ -188,7 +188,7 @@ a:hover { text-decoration: underline; }
 }
 .splash-bar {
   height: 100%; border-radius: 999px;
-  background: linear-gradient(90deg, #202123, #ffffff);
+  background: linear-gradient(90deg, #111A7B, #ffffff);
   transform: scaleX(0); transform-origin: left;
   animation: splash-load 4s cubic-bezier(.4,0,.2,1) forwards;
 }
