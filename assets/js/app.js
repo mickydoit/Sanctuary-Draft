@@ -2,8 +2,8 @@
 // Pages base path with no server rewrites.
 
 import { store } from './store.js?v=17';
-import { getLadder, getFixturesView, getBracket, getDraftState, getTeamsView, getPlayerView, getTeamView, getGroupStandings, getStats, getGroupPositions, resolveEspnSlot } from './compute.js?v=31';
-import { renderLadder, renderFixtures, renderBracket, renderDraft, renderAdmin, renderLogin, renderTeamsOverview, renderPlayerView, renderTeamView, renderStats, renderIdentityGate } from './views.js?v=56';
+import { getLadder, getFixturesView, getBracket, getDraftState, getTeamsView, getPlayerView, getTeamView, getGroupStandings, getStats, getGroupPositions, resolveEspnSlot } from './compute.js?v=30';
+import { renderLadder, renderFixtures, renderBracket, renderDraft, renderAdmin, renderLogin, renderTeamsOverview, renderPlayerView, renderTeamView, renderStats, renderIdentityGate } from './views.js?v=52';
 
 const root = document.getElementById('root');
 
@@ -54,39 +54,6 @@ let r32Overlay = null;         // resolved R32 matchups: [{home, away, homeConfi
 
 const ESPN_R32_DATES = ['20260628','20260629','20260630','20260701','20260702','20260703','20260704'];
 const ESPN_SB = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=';
-const _ESPN_CLOCK_MAP = {
-  'Bosnia-Herzegovina':'Bosnia and Herzegovina','Bosnia & Herzegovina':'Bosnia and Herzegovina',
-  'Czechia':'Czech Republic','Congo DR':'DR Congo','DRC':'DR Congo',
-  'Türkiye':'Turkey','Korea Republic':'South Korea',
-  "Côte d'Ivoire":'Ivory Coast',"Cote d'Ivoire":'Ivory Coast',
-};
-async function fetchFixtureClocks() {
-  const clocks = {};
-  const now = new Date();
-  const dates = [-1, 0, 1].map(offset => {
-    const d = new Date(now);
-    d.setUTCDate(d.getUTCDate() + offset);
-    return d.toISOString().slice(0, 10).replace(/-/g, '');
-  });
-  for (const date of dates) {
-    try {
-      const res = await fetch(ESPN_SB + date);
-      if (!res.ok) continue;
-      const json = await res.json();
-      for (const event of json.events || []) {
-        const comp  = event.competitions?.[0];
-        const stype = comp?.status?.type ?? {};
-        const home  = comp?.competitors?.find(c => c.homeAway === 'home');
-        const away  = comp?.competitors?.find(c => c.homeAway === 'away');
-        if (!home || !away) continue;
-        const h = _ESPN_CLOCK_MAP[home.team?.displayName] || home.team?.displayName || '';
-        const a = _ESPN_CLOCK_MAP[away.team?.displayName] || away.team?.displayName || '';
-        if (h && a) clocks[`${h}|${a}`] = { state: stype.state || 'pre', clock: stype.shortDetail || '' };
-      }
-    } catch { /* ignore */ }
-  }
-  return clocks;
-}
 const ESPN_STANDINGS_URL = 'https://site.api.espn.com/apis/v2/sports/soccer/fifa.world/standings?season=2026';
 
 async function loadBracketOverlay() {
@@ -272,11 +239,9 @@ async function render(opts = {}) {
     body = renderTeamView(getTeamView(data, teamId), fromPlayer);
   } else {
     switch (route) {
-      case '/fixtures': {
-        const clocks = await fetchFixtureClocks().catch(() => ({}));
-        body = renderFixtures(getFixturesView(data), clocks);
+      case '/fixtures':
+        body = renderFixtures(getFixturesView(data));
         break;
-      }
       case '/bracket':
         if (!r32Overlay) await loadBracketOverlay();
         body = renderBracket(getBracket(data, r32Overlay || []));
@@ -317,9 +282,7 @@ async function render(opts = {}) {
         let ladderStats = { playerStats: [], awardWinners: [] };
         try { ladderStats = await store.loadStats(); } catch { /* show ladder without bonus */ }
         const ladderStatsResult = getStats(data, ladderStats);
-        if (!r32Overlay) await loadBracketOverlay();
-        const ladderClocks = await fetchFixtureClocks().catch(() => ({}));
-        body = renderLadder(getLadder(data, ladderStatsResult.bonusByPlayer), getGroupStandings(data), getBracket(data, r32Overlay || []), ladderClocks);
+        body = renderLadder(getLadder(data, ladderStatsResult.bonusByPlayer), getGroupStandings(data));
         break;
       }
     }
