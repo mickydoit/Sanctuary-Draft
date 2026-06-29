@@ -34,7 +34,7 @@ function survivingTeams(fixtures) {
     if (f.home_team_id != null) qualified.add(f.home_team_id);
     if (f.away_team_id != null) qualified.add(f.away_team_id);
   }
-  const bracketDrawn = qualified.size >= 32;
+  const bracketDrawn = qualified.size > 0;
 
   // Teams that lost a finished knockout match are knocked out.
   const eliminated = new Set();
@@ -165,17 +165,7 @@ const fxSort = (a, b) => {
 export function getFixturesView(data) {
   const teamById = byId(data.teams);
   const owners = ownerNames(data);
-  // Suppress null-team R32 placeholder rows when a real fixture exists at the same kickoff.
-  // The sync-bracket job inserts real fixtures alongside the original placeholders.
-  const r32RealKickoffs = new Set(
-    data.fixtures
-      .filter(f => f.stage === 'R32' && (f.home_team_id != null || f.away_team_id != null) && f.kickoff)
-      .map(f => f.kickoff)
-  );
-  const fixtures = [...data.fixtures]
-    .filter(f => !(f.stage === 'R32' && f.home_team_id == null && f.away_team_id == null && r32RealKickoffs.has(f.kickoff)))
-    .sort(fxSort)
-    .map((f) => decorateFixture(f, teamById, owners));
+  const fixtures = [...data.fixtures].sort(fxSort).map((f) => decorateFixture(f, teamById, owners));
   const groups = {};
   for (const f of fixtures) (groups[f.date_label] ||= []).push(f);
   return Object.entries(groups).map(([title, items]) => ({
@@ -205,36 +195,16 @@ export function getBracket(data, r32Overlay = []) {
 
   const rounds = KO_ROUNDS.map((rd) => {
     // R32: skip DB placeholder fixtures with no teams — the ESPN overlay fills those slots.
-    // Once an R32 match is played and teams are assigned, those DB rows take priority.
-    // Sort by bracket_pos so adjacent pairs in the array are the correct R16 opponents
-    // (ESPN's draw is non-sequential — e.g. pos 13 plays pos 15, not 14).
+    // Sort by bracket_pos so adjacent pairs feed the correct R16 slot.
+    // Other stages: also filter out null-team stubs so sync-bracket rows fill correctly.
     const matches = rd.stage === 'R32'
       ? (byStage['R32'] || [])
           .filter((m) => m.home_name != null || m.away_name != null)
           .sort((a, b) => (a.bracket_pos ?? 999) - (b.bracket_pos ?? 999))
-      : (byStage[rd.stage] || []).slice();
-
-    // Build set of team names already covered by real DB fixtures, then walk the overlay
-    // sequentially skipping any entry whose teams are already represented — this prevents
-    // duplicates when ESPN returns all 16 R32 matches but the DB only has a subset confirmed.
-    const dbNames = rd.stage === 'R32'
-      ? new Set(matches.flatMap((m) => [m.home_name, m.away_name].filter(Boolean).map((n) => n.toLowerCase())))
-      : null;
-    let ovPtr = 0;
-
+      : (byStage[rd.stage] || []).filter((m) => m.home_name != null || m.away_name != null);
     while (matches.length < rd.expected) {
-      let ov = null;
-      if (rd.stage === 'R32' && r32Overlay) {
-        while (ovPtr < r32Overlay.length) {
-          const cand = r32Overlay[ovPtr++];
-          if (!cand) continue;
-          const hIn = cand.home && dbNames.has(cand.home.toLowerCase());
-          const aIn = cand.away && dbNames.has(cand.away.toLowerCase());
-          if (hIn || aIn) continue;
-          ov = cand;
-          break;
-        }
-      }
+      const idx = matches.length;
+      const ov = (rd.stage === 'R32' && r32Overlay[idx]) || null;
       if (ov) {
         // Overlay a known R32 matchup — one or both sides may still be TBD
         const ownerFor = (name) => {
@@ -513,22 +483,21 @@ export function getGroupPositions(standings) {
       const gp = e.stats?.find((s) => s.name === 'gamesPlayed')?.value ?? 0;
       return gp >= 3;
     });
-    const qualified = entries
-      .filter((e) => {
-        if (e.note?.description !== 'Advance to Round of 32') return false;
-        const pts = e.stats?.find((s) => s.name === 'points')?.value ?? 0;
-        const gp  = e.stats?.find((s) => s.name === 'gamesPlayed')?.value ?? 0;
-        // Only confirmed: group complete, OR 6+ pts with 2+ games (mathematically guaranteed top-2)
-        return groupComplete || (gp >= 2 && pts >= 6);
-      })
-      .map((e) => ({
-        name: STANDINGS_NAME_MAP[e.team?.displayName] || e.team?.displayName || '',
-        pts: (e.stats?.find((s) => s.name === 'points')?.value) ?? 0,
-        gd:  (e.stats?.find((s) => s.name === 'pointDifferential')?.value) ?? 0,
-        gf:  (e.stats?.find((s) => s.name === 'pointsFor')?.value) ?? 0,
-      }))
-      .sort((a, b) => b.pts - a.pts || b.gd - a.gd || b.gf - a.gf);
-    if (qualified.length >= 1) positions[group.name] = { winner: qualified[0].name, runnerUp: qualified[1]?.name || null };
+    let winner = null, runnerUp = null;
+    for (const e of entries) {
+      if (e.note?.description !== 'Advance to Round of 32') continue;
+      const rank  = e.stats?.find((s) => s.name === 'rank')?.value;
+      const pts   = e.stats?.find((s) => s.name === 'points')?.value ?? 0;
+      const gp    = e.stats?.find((s) => s.name === 'gamesPlayed')?.value ?? 0;
+      // Only resolve if mathematically confirmed: group done, OR 6+ pts with 2+ games played
+      // (6 pts after 2 games in a 4-team group guarantees top-2 regardless of remaining result)
+      if (!groupComplete && !(gp >= 2 && pts >= 6)) continue;
+      const espnName = e.team?.displayName || '';
+      const name = STANDINGS_NAME_MAP[espnName] || espnName;
+      if (rank === 1) winner = name;
+      else if (rank === 2) runnerUp = name;
+    }
+    if (winner || runnerUp) positions[group.name] = { winner, runnerUp };
   }
   return positions;
 }
