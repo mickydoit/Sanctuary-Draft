@@ -282,7 +282,7 @@ async function render(opts = {}) {
         let ladderStats = { playerStats: [], awardWinners: [] };
         try { ladderStats = await store.loadStats(); } catch { /* show ladder without bonus */ }
         const ladderStatsResult = getStats(data, ladderStats);
-        body = renderLadder(getLadder(data, ladderStatsResult.bonusByPlayer), getGroupStandings(data));
+        body = renderLadder(getLadder(data, ladderStatsResult.bonusByPlayer), getGroupStandings(data), getBracket(data, r32Overlay || []));
         break;
       }
     }
