@@ -195,16 +195,36 @@ export function getBracket(data, r32Overlay = []) {
 
   const rounds = KO_ROUNDS.map((rd) => {
     // R32: skip DB placeholder fixtures with no teams — the ESPN overlay fills those slots.
-    // Sort by bracket_pos so adjacent pairs feed the correct R16 slot.
-    // Other stages: also filter out null-team stubs so sync-bracket rows fill correctly.
+    // Once an R32 match is played and teams are assigned, those DB rows take priority.
+    // Sort by bracket_pos so adjacent pairs in the array are the correct R16 opponents
+    // (ESPN's draw is non-sequential — e.g. pos 13 plays pos 15, not 14).
     const matches = rd.stage === 'R32'
       ? (byStage['R32'] || [])
           .filter((m) => m.home_name != null || m.away_name != null)
           .sort((a, b) => (a.bracket_pos ?? 999) - (b.bracket_pos ?? 999))
-      : (byStage[rd.stage] || []).filter((m) => m.home_name != null || m.away_name != null);
+      : (byStage[rd.stage] || []).slice();
+
+    // Build set of team names already covered by real DB fixtures, then walk the overlay
+    // sequentially skipping any entry whose teams are already represented — this prevents
+    // duplicates when ESPN returns all 16 R32 matches but the DB only has a subset confirmed.
+    const dbNames = rd.stage === 'R32'
+      ? new Set(matches.flatMap((m) => [m.home_name, m.away_name].filter(Boolean).map((n) => n.toLowerCase())))
+      : null;
+    let ovPtr = 0;
+
     while (matches.length < rd.expected) {
-      const idx = matches.length;
-      const ov = (rd.stage === 'R32' && r32Overlay[idx]) || null;
+      let ov = null;
+      if (rd.stage === 'R32' && r32Overlay) {
+        while (ovPtr < r32Overlay.length) {
+          const cand = r32Overlay[ovPtr++];
+          if (!cand) continue;
+          const hIn = cand.home && dbNames.has(cand.home.toLowerCase());
+          const aIn = cand.away && dbNames.has(cand.away.toLowerCase());
+          if (hIn || aIn) continue;
+          ov = cand;
+          break;
+        }
+      }
       if (ov) {
         // Overlay a known R32 matchup — one or both sides may still be TBD
         const ownerFor = (name) => {
