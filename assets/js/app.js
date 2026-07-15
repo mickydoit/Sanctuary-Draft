@@ -3,7 +3,7 @@
 
 import { store } from './store.js?v=17';
 import { getLadder, getFixturesView, getBracket, getDraftState, getTeamsView, getPlayerView, getTeamView, getGroupStandings, getStats, getGroupPositions, resolveEspnSlot } from './compute.js?v=34';
-import { renderLadder, renderFixtures, renderBracket, renderDraft, renderAdmin, renderLogin, renderTeamsOverview, renderPlayerView, renderTeamView, renderStats, renderIdentityGate } from './views.js?v=55';
+import { renderLadder, renderFixtures, renderBracket, renderDraft, renderAdmin, renderLogin, renderTeamsOverview, renderPlayerView, renderTeamView, renderStats, renderIdentityGate } from './views.js?v=56';
 
 const root = document.getElementById('root');
 
@@ -266,7 +266,7 @@ async function render(opts = {}) {
         // Hidden experimental bracket prototype — reachable only by typing the
         // URL; deliberately absent from NAV/bottom-nav. Lazy import so normal
         // visitors never download it.
-        const bt = await import('./bracket-test.js?v=6');
+        const bt = await import('./bracket-test.js?v=7');
         body = await bt.renderBracketTestPage(data);
         break;
       }
